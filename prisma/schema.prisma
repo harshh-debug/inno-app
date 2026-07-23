@@ -1,0 +1,255 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum PlatformRole {
+  FIRST_YEAR_STUDENT
+  COORDINATOR
+  ADMIN
+}
+
+enum InputType {
+  TEXT
+  TEXTAREA
+  EMAIL
+  PHONE
+  NUMBER
+  DATE
+  SELECT
+  MULTI_SELECT
+  CHECKBOX
+}
+
+enum RegistrationChannel {
+  WEB
+  APP
+}
+
+enum PaymentStatus {
+  UNPAID
+  PAID
+  REJECTED
+}
+
+enum RecruitmentDecision {
+  PENDING
+  SELECTED
+  WAITLISTED
+  REJECTED
+}
+
+enum VerificationCodePurpose {
+  EMAIL_VERIFICATION
+  PASSWORD_SETUP
+  PASSWORD_RESET
+}
+
+enum TimelineEventType {
+  TEST
+  INTERVIEW
+  CUSTOM
+}
+
+model User {
+  id              String       @id @default(uuid()) @db.Uuid
+  email           String       @db.VarChar(320)
+  normalizedEmail String       @unique @map("normalized_email") @db.VarChar(320)
+  passwordHash    String?      @map("password_hash")
+  emailVerifiedAt DateTime?    @map("email_verified_at") @db.Timestamptz(3)
+  role            PlatformRole @default(FIRST_YEAR_STUDENT)
+  isSuspended     Boolean      @default(false) @map("is_suspended")
+
+  fullName String? @map("full_name") @db.VarChar(200)
+  phone    String? @db.VarChar(40)
+  batch    String? @db.VarChar(100)
+  year     Int?
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  registrations      RegistrationSubmission[]
+  verificationCodes  VerificationCode[]
+  paymentsVerified   RegistrationSubmission[] @relation("PaymentVerifiedBy")
+  decisionsMade      RegistrationSubmission[] @relation("DecisionMadeBy")
+
+  @@index([role])
+  @@index([fullName])
+  @@map("users")
+}
+
+model RecruitmentCycle {
+  id           String  @id @default(uuid()) @db.Uuid
+  name         String  @db.VarChar(200)
+  academicYear String  @map("academic_year") @db.VarChar(30)
+  feeAmount    Int     @default(50) @map("fee_amount")
+  isActive     Boolean @default(false) @map("is_active")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  form          Form?
+  registrations RegistrationSubmission[]
+  timeline      RecruitmentTimelineEvent[]
+
+  @@index([isActive])
+  @@map("recruitment_cycles")
+}
+
+model Form {
+  id                 String  @id @default(uuid()) @db.Uuid
+  recruitmentCycleId String  @unique @map("recruitment_cycle_id") @db.Uuid
+  title              String  @default("Registration Form") @db.VarChar(300)
+  description        String? @db.Text
+  submitButtonLabel  String  @default("Submit") @map("submit_button_label") @db.VarChar(100)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  recruitmentCycle RecruitmentCycle          @relation(fields: [recruitmentCycleId], references: [id], onDelete: Restrict)
+  fields           FormField[]
+  submissions      RegistrationSubmission[]
+
+  @@map("forms")
+}
+
+model FormField {
+  id     String @id @default(uuid()) @db.Uuid
+  formId String @map("form_id") @db.Uuid
+
+  key         String    @db.VarChar(100)
+  title       String    @db.VarChar(200)
+  helpText    String?   @map("help_text") @db.Text
+  type        InputType
+  placeholder String?   @db.VarChar(300)
+  options     String[] @default([])
+
+  required        Boolean @default(false)
+  order           Int
+  isActive        Boolean @default(true) @map("is_active")
+  minLength       Int?    @map("min_length")
+  maxLength       Int?    @map("max_length")
+  minValue        Float?  @map("min_value")
+  maxValue        Float?  @map("max_value")
+  validationRules Json?   @map("validation_rules") @db.JsonB
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  form            Form                   @relation(fields: [formId], references: [id], onDelete: Restrict)
+  submittedInputs FormInputSubmission[]
+
+  @@unique([formId, key])
+  @@unique([formId, order])
+  @@index([formId, isActive, order])
+  @@map("form_fields")
+}
+
+model RegistrationSubmission {
+  id                 String  @id @default(uuid()) @db.Uuid
+  applicationNumber  Int     @unique @default(autoincrement()) @map("application_number")
+  userId             String  @map("user_id") @db.Uuid
+  recruitmentCycleId String  @map("recruitment_cycle_id") @db.Uuid
+  formId             String  @map("form_id") @db.Uuid
+  channel            RegistrationChannel
+
+  paymentStatus       PaymentStatus @default(UNPAID) @map("payment_status")
+  paymentVerifiedAt   DateTime?     @map("payment_verified_at") @db.Timestamptz(3)
+  paymentVerifiedById String?       @map("payment_verified_by_id") @db.Uuid
+  paymentReference    String?       @map("payment_reference") @db.VarChar(200)
+  paymentNote         String?       @map("payment_note") @db.Text
+
+  decision     RecruitmentDecision @default(PENDING)
+  decisionNote String?             @map("decision_note") @db.Text
+  decidedAt    DateTime?           @map("decided_at") @db.Timestamptz(3)
+  decidedById  String?             @map("decided_by_id") @db.Uuid
+
+  submittedAt DateTime @default(now()) @map("submitted_at") @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user              User             @relation(fields: [userId], references: [id], onDelete: Restrict)
+  recruitmentCycle  RecruitmentCycle @relation(fields: [recruitmentCycleId], references: [id], onDelete: Restrict)
+  form              Form             @relation(fields: [formId], references: [id], onDelete: Restrict)
+  paymentVerifiedBy User?            @relation("PaymentVerifiedBy", fields: [paymentVerifiedById], references: [id], onDelete: Restrict)
+  decidedBy         User?            @relation("DecisionMadeBy", fields: [decidedById], references: [id], onDelete: Restrict)
+  submissions       FormInputSubmission[]
+
+  @@unique([userId, recruitmentCycleId])
+  @@index([recruitmentCycleId, paymentStatus])
+  @@index([recruitmentCycleId, decision])
+  @@map("registration_submissions")
+}
+
+model FormInputSubmission {
+  id           String @id @default(uuid()) @db.Uuid
+  submissionId String @map("submission_id") @db.Uuid
+  fieldId      String? @map("field_id") @db.Uuid
+
+  fieldKey     String    @map("field_key") @db.VarChar(100)
+  fieldTitle   String    @map("field_title") @db.VarChar(200)
+  fieldHelpText String?  @map("field_help_text") @db.Text
+  fieldType    InputType @map("field_type")
+  fieldOptions String[]  @default([]) @map("field_options")
+  value        Json      @db.JsonB
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  submission RegistrationSubmission @relation(fields: [submissionId], references: [id], onDelete: Restrict)
+  field      FormField?             @relation(fields: [fieldId], references: [id], onDelete: SetNull)
+
+  @@unique([submissionId, fieldKey])
+  @@index([submissionId])
+  @@map("form_input_submissions")
+}
+
+model VerificationCode {
+  id              String                  @id @default(uuid()) @db.Uuid
+  userId          String                  @map("user_id") @db.Uuid
+  normalizedEmail String                  @map("normalized_email") @db.VarChar(320)
+  purpose         VerificationCodePurpose
+  codeHash        String                  @map("code_hash")
+  expiresAt       DateTime                @map("expires_at") @db.Timestamptz(3)
+  failedAttempts  Int                     @default(0) @map("failed_attempts")
+  maxAttempts     Int                     @default(5) @map("max_attempts")
+  resendAvailableAt DateTime              @map("resend_available_at") @db.Timestamptz(3)
+  usedAt          DateTime?               @map("used_at") @db.Timestamptz(3)
+  invalidatedAt   DateTime?               @map("invalidated_at") @db.Timestamptz(3)
+
+  actionTokenHash   String?   @unique @map("action_token_hash")
+  actionTokenExpiresAt DateTime? @map("action_token_expires_at") @db.Timestamptz(3)
+  actionTokenUsedAt  DateTime? @map("action_token_used_at") @db.Timestamptz(3)
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([userId, purpose, expiresAt])
+  @@index([normalizedEmail, purpose])
+  @@map("verification_codes")
+}
+
+model RecruitmentTimelineEvent {
+  id                 String            @id @default(uuid()) @db.Uuid
+  recruitmentCycleId String            @map("recruitment_cycle_id") @db.Uuid
+  type               TimelineEventType
+  title              String            @db.VarChar(200)
+  description        String?           @db.Text
+  scheduledAt        DateTime?         @map("scheduled_at") @db.Timestamptz(3)
+  location           String?           @db.Text
+  meetingUrl         String?           @map("meeting_url") @db.Text
+  instructions       String?           @db.Text
+  order              Int
+  isVisible          Boolean           @default(false) @map("is_visible")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  recruitmentCycle RecruitmentCycle @relation(fields: [recruitmentCycleId], references: [id], onDelete: Restrict)
+
+  @@unique([recruitmentCycleId, order])
+  @@index([recruitmentCycleId, isVisible, order])
+  @@map("recruitment_timeline_events")
+}
