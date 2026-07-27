@@ -1,3 +1,6 @@
+// Innogeeks — Prisma schema
+// Web-only registration flow. Form is locked once a submission exists (no versioning system).
+
 generator client {
   provider = "prisma-client"
   output   = "../generated/prisma"
@@ -6,6 +9,10 @@ generator client {
 datasource db {
   provider = "postgresql"
 }
+
+// ─────────────────────────────────────────────
+// Enums
+// ─────────────────────────────────────────────
 
 enum PlatformRole {
   FIRST_YEAR_STUDENT
@@ -25,15 +32,9 @@ enum InputType {
   CHECKBOX
 }
 
-enum RegistrationChannel {
-  WEB
-  APP
-}
-
 enum PaymentStatus {
   UNPAID
   PAID
-  REJECTED
 }
 
 enum RecruitmentDecision {
@@ -44,9 +45,8 @@ enum RecruitmentDecision {
 }
 
 enum VerificationCodePurpose {
-  EMAIL_VERIFICATION
-  PASSWORD_SETUP
-  PASSWORD_RESET
+  ACTIVATION      // sent after admin marks payment PAID; gates password creation
+  PASSWORD_RESET  // future: forgot-password flow
 }
 
 enum TimelineEventType {
@@ -55,15 +55,23 @@ enum TimelineEventType {
   CUSTOM
 }
 
+// ─────────────────────────────────────────────
+// Core identity
+// ─────────────────────────────────────────────
+
 model User {
   id              String       @id @default(uuid()) @db.Uuid
-  email           String       @db.VarChar(320)
+  collegeEmail           String       @db.VarChar(320)
+  personalEmail          String?      @map("personal_email") @db.VarChar(320)
   normalizedEmail String       @unique @map("normalized_email") @db.VarChar(320)
   passwordHash    String?      @map("password_hash")
   emailVerifiedAt DateTime?    @map("email_verified_at") @db.Timestamptz(3)
   role            PlatformRole @default(FIRST_YEAR_STUDENT)
   isSuspended     Boolean      @default(false) @map("is_suspended")
 
+  // Student profile fields (only meaningful for FIRST_YEAR_STUDENT, kept on User
+  // since one registration per cycle and no app-channel dedup complexity to justify
+  // a separate profile table right now)
   fullName String? @map("full_name") @db.VarChar(200)
   phone    String? @db.VarChar(40)
   batch    String? @db.VarChar(100)
@@ -72,15 +80,20 @@ model User {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  registrations      RegistrationSubmission[]
-  verificationCodes  VerificationCode[]
-  paymentsVerified   RegistrationSubmission[] @relation("PaymentVerifiedBy")
-  decisionsMade      RegistrationSubmission[] @relation("DecisionMadeBy")
+  registrations     RegistrationSubmission[] @relation("Registrant")
+  paymentsVerified  RegistrationSubmission[] @relation("PaymentVerifiedBy")
+  decisionsMade     RegistrationSubmission[] @relation("DecisionMadeBy")
+  verificationCodes VerificationCode[]
+  auditLogsAsActor  AuditLog[]
 
   @@index([role])
   @@index([fullName])
   @@map("users")
 }
+
+// ─────────────────────────────────────────────
+// Recruitment cycle (batch/year)
+// ─────────────────────────────────────────────
 
 model RecruitmentCycle {
   id           String  @id @default(uuid()) @db.Uuid
@@ -92,13 +105,21 @@ model RecruitmentCycle {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  form          Form?
-  registrations RegistrationSubmission[]
-  timeline      RecruitmentTimelineEvent[]
+  form           Form?
+  registrations  RegistrationSubmission[]
+  timelineEvents RecruitmentTimelineEvent[]
+  interviewSlots InterviewSlot[]
 
   @@index([isActive])
   @@map("recruitment_cycles")
 }
+
+// ─────────────────────────────────────────────
+// Dynamic form — one per cycle, locked once any submission exists.
+// Enforcement of "locked" is a SERVICE-LAYER rule, not a DB constraint:
+// before allowing a FormField update/delete/reorder, check
+// RegistrationSubmission count for the cycle == 0.
+// ─────────────────────────────────────────────
 
 model Form {
   id                 String  @id @default(uuid()) @db.Uuid
@@ -110,7 +131,7 @@ model Form {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  recruitmentCycle RecruitmentCycle          @relation(fields: [recruitmentCycleId], references: [id], onDelete: Restrict)
+  recruitmentCycle RecruitmentCycle         @relation(fields: [recruitmentCycleId], references: [id], onDelete: Restrict)
   fields           FormField[]
   submissions      RegistrationSubmission[]
 
@@ -121,26 +142,29 @@ model FormField {
   id     String @id @default(uuid()) @db.Uuid
   formId String @map("form_id") @db.Uuid
 
-  key         String    @db.VarChar(100)
+  key         String    @db.VarChar(100) // stable machine key, e.g. "domain_interest"
   title       String    @db.VarChar(200)
   helpText    String?   @map("help_text") @db.Text
   type        InputType
   placeholder String?   @db.VarChar(300)
-  options     String[] @default([])
 
-  required        Boolean @default(false)
-  order           Int
-  isActive        Boolean @default(true) @map("is_active")
-  minLength       Int?    @map("min_length")
-  maxLength       Int?    @map("max_length")
-  minValue        Float?  @map("min_value")
-  maxValue        Float?  @map("max_value")
-  validationRules Json?   @map("validation_rules") @db.JsonB
+  // For SELECT / MULTI_SELECT / CHECKBOX: comma-separated options, e.g. "Web,ML,IoT,Android"
+  // Split on "," when rendering or validating. If an option itself might contain a comma,
+  // this will break — flag it if that's ever a real case and we'll switch delimiters.
+  enum String? @db.Text
+
+  required  Boolean @default(false)
+  order     Int
+  isActive  Boolean @default(true) @map("is_active")
+  minLength Int?    @map("min_length")
+  maxLength Int?    @map("max_length")
+  minValue  Float?  @map("min_value")
+  maxValue  Float?  @map("max_value")
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  form            Form                   @relation(fields: [formId], references: [id], onDelete: Restrict)
+  form            Form                  @relation(fields: [formId], references: [id], onDelete: Restrict)
   submittedInputs FormInputSubmission[]
 
   @@unique([formId, key])
@@ -149,13 +173,17 @@ model FormField {
   @@map("form_fields")
 }
 
+// ─────────────────────────────────────────────
+// Registration + payment + decision
+// ─────────────────────────────────────────────
+
 model RegistrationSubmission {
-  id                 String  @id @default(uuid()) @db.Uuid
-  applicationNumber  Int     @unique @default(autoincrement()) @map("application_number")
-  userId             String  @map("user_id") @db.Uuid
-  recruitmentCycleId String  @map("recruitment_cycle_id") @db.Uuid
-  formId             String  @map("form_id") @db.Uuid
-  channel            RegistrationChannel
+  id                String @id @default(uuid()) @db.Uuid
+  applicationNumber Int    @unique @default(autoincrement()) @map("application_number")
+
+  userId             String @map("user_id") @db.Uuid
+  recruitmentCycleId String @map("recruitment_cycle_id") @db.Uuid
+  formId             String @map("form_id") @db.Uuid
 
   paymentStatus       PaymentStatus @default(UNPAID) @map("payment_status")
   paymentVerifiedAt   DateTime?     @map("payment_verified_at") @db.Timestamptz(3)
@@ -171,12 +199,14 @@ model RegistrationSubmission {
   submittedAt DateTime @default(now()) @map("submitted_at") @db.Timestamptz(3)
   updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  user              User             @relation(fields: [userId], references: [id], onDelete: Restrict)
+  user              User             @relation("Registrant", fields: [userId], references: [id], onDelete: Restrict)
   recruitmentCycle  RecruitmentCycle @relation(fields: [recruitmentCycleId], references: [id], onDelete: Restrict)
   form              Form             @relation(fields: [formId], references: [id], onDelete: Restrict)
-  paymentVerifiedBy User?            @relation("PaymentVerifiedBy", fields: [paymentVerifiedById], references: [id], onDelete: Restrict)
-  decidedBy         User?            @relation("DecisionMadeBy", fields: [decidedById], references: [id], onDelete: Restrict)
-  submissions       FormInputSubmission[]
+  paymentVerifiedBy User?            @relation("PaymentVerifiedBy", fields: [paymentVerifiedById], references: [id], onDelete: SetNull)
+  decidedBy         User?            @relation("DecisionMadeBy", fields: [decidedById], references: [id], onDelete: SetNull)
+
+  formInputs  FormInputSubmission[]
+  slotBooking SlotBooking?
 
   @@unique([userId, recruitmentCycleId])
   @@index([recruitmentCycleId, paymentStatus])
@@ -187,24 +217,26 @@ model RegistrationSubmission {
 model FormInputSubmission {
   id           String @id @default(uuid()) @db.Uuid
   submissionId String @map("submission_id") @db.Uuid
-  fieldId      String? @map("field_id") @db.Uuid
+  fieldId      String @map("field_id") @db.Uuid
 
-  fieldKey     String    @map("field_key") @db.VarChar(100)
-  fieldTitle   String    @map("field_title") @db.VarChar(200)
-  fieldHelpText String?  @map("field_help_text") @db.Text
-  fieldType    InputType @map("field_type")
-  fieldOptions String[]  @default([]) @map("field_options")
-  value        Json      @db.JsonB
+  fieldKey   String    @map("field_key") @db.VarChar(100) // snapshot, in case field key ever changes
+  fieldTitle String    @map("field_title") @db.VarChar(200)
+  fieldType  InputType @map("field_type")
+  value      String    @db.Text // CHECKBOX/MULTI_SELECT multi-answers: comma-joined, same convention as FormField.enum
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
   submission RegistrationSubmission @relation(fields: [submissionId], references: [id], onDelete: Restrict)
-  field      FormField?             @relation(fields: [fieldId], references: [id], onDelete: SetNull)
+  field      FormField              @relation(fields: [fieldId], references: [id], onDelete: Restrict)
 
   @@unique([submissionId, fieldKey])
   @@index([submissionId])
   @@map("form_input_submissions")
 }
+
+// ─────────────────────────────────────────────
+// Email verification / activation codes
+// ─────────────────────────────────────────────
 
 model VerificationCode {
   id              String                  @id @default(uuid()) @db.Uuid
@@ -213,16 +245,20 @@ model VerificationCode {
   purpose         VerificationCodePurpose
   codeHash        String                  @map("code_hash")
   expiresAt       DateTime                @map("expires_at") @db.Timestamptz(3)
-  failedAttempts  Int                     @default(0) @map("failed_attempts")
-  maxAttempts     Int                     @default(5) @map("max_attempts")
-  resendAvailableAt DateTime              @map("resend_available_at") @db.Timestamptz(3)
-  usedAt          DateTime?               @map("used_at") @db.Timestamptz(3)
-  invalidatedAt   DateTime?               @map("invalidated_at") @db.Timestamptz(3)
 
-  actionTokenHash   String?   @unique @map("action_token_hash")
+  failedAttempts    Int      @default(0) @map("failed_attempts")
+  maxAttempts       Int      @default(5) @map("max_attempts")
+  resendAvailableAt DateTime @map("resend_available_at") @db.Timestamptz(3)
+
+  usedAt        DateTime? @map("used_at") @db.Timestamptz(3)
+  invalidatedAt DateTime? @map("invalidated_at") @db.Timestamptz(3)
+
+  // Issued after successful code verification; consumed by the password-creation step
+  actionTokenHash      String?   @unique @map("action_token_hash")
   actionTokenExpiresAt DateTime? @map("action_token_expires_at") @db.Timestamptz(3)
-  actionTokenUsedAt  DateTime? @map("action_token_used_at") @db.Timestamptz(3)
-  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  actionTokenUsedAt    DateTime? @map("action_token_used_at") @db.Timestamptz(3)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
   user User @relation(fields: [userId], references: [id], onDelete: Restrict)
 
@@ -230,6 +266,10 @@ model VerificationCode {
   @@index([normalizedEmail, purpose])
   @@map("verification_codes")
 }
+
+// ─────────────────────────────────────────────
+// Recruitment timeline (student-facing)
+// ─────────────────────────────────────────────
 
 model RecruitmentTimelineEvent {
   id                 String            @id @default(uuid()) @db.Uuid
@@ -252,4 +292,69 @@ model RecruitmentTimelineEvent {
   @@unique([recruitmentCycleId, order])
   @@index([recruitmentCycleId, isVisible, order])
   @@map("recruitment_timeline_events")
+}
+
+// ─────────────────────────────────────────────
+// Interview slot booking
+// Admin pre-creates fixed slots (date/time/capacity/interviewer);
+// student books one open slot. Capacity is enforced at the service layer
+// by counting active (non-cancelled) SlotBooking rows against slot.capacity.
+// ─────────────────────────────────────────────
+
+model InterviewSlot {
+  id                 String   @id @default(uuid()) @db.Uuid
+  recruitmentCycleId String   @map("recruitment_cycle_id") @db.Uuid
+  interviewerName    String   @map("interviewer_name") @db.VarChar(200)
+  startTime          DateTime @map("start_time") @db.Timestamptz(3)
+  endTime            DateTime @map("end_time") @db.Timestamptz(3)
+  location           String?  @db.Text
+  meetingUrl         String?  @map("meeting_url") @db.Text
+  capacity           Int      @default(1)
+  isCancelled        Boolean  @default(false) @map("is_cancelled")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  recruitmentCycle RecruitmentCycle @relation(fields: [recruitmentCycleId], references: [id], onDelete: Restrict)
+  bookings         SlotBooking[]
+
+  @@index([recruitmentCycleId, startTime])
+  @@map("interview_slots")
+}
+
+model SlotBooking {
+  id           String    @id @default(uuid()) @db.Uuid
+  submissionId String    @unique @map("submission_id") @db.Uuid // one interview booking per student per cycle
+  slotId       String    @map("slot_id") @db.Uuid
+  bookedAt     DateTime  @default(now()) @map("booked_at") @db.Timestamptz(3)
+  cancelledAt  DateTime? @map("cancelled_at") @db.Timestamptz(3)
+
+  submission RegistrationSubmission @relation(fields: [submissionId], references: [id], onDelete: Restrict)
+  slot       InterviewSlot          @relation(fields: [slotId], references: [id], onDelete: Restrict)
+
+  @@index([slotId])
+  @@map("slot_bookings")
+}
+
+// ─────────────────────────────────────────────
+// Audit log — flagged addition, not explicitly requested.
+// Remove if not wanted; nothing else in the schema depends on it.
+// ─────────────────────────────────────────────
+
+model AuditLog {
+  id            String   @id @default(uuid()) @db.Uuid
+  actorId       String?  @map("actor_id") @db.Uuid
+  action        String   @db.VarChar(100) // e.g. "REGISTRATION_MARKED_PAID", "DECISION_UPDATED"
+  targetEntity  String   @map("target_entity") @db.VarChar(100)
+  targetId      String   @map("target_id") @db.Uuid
+  previousState Json?    @map("previous_state") @db.JsonB
+  newState      Json?    @map("new_state") @db.JsonB
+  note          String?  @db.Text
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  actor User? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([targetEntity, targetId])
+  @@index([actorId])
+  @@map("audit_logs")
 }
