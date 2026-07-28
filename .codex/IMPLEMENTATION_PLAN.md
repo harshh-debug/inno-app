@@ -8,8 +8,8 @@ The public registration website, admin panel, and Android app use one Express ba
 
 Implementation proceeds one module at a time. A module is complete only when:
 
-1. Its targeted unit and integration tests pass.
-2. All tests from earlier modules still pass.
+1. Its required end-to-end API scenarios pass through manual `curl` requests against the running backend and required services.
+2. All manual end-to-end scenarios from earlier modules still pass.
 3. Prisma validation and TypeScript typechecking pass.
 4. The application build passes.
 
@@ -28,13 +28,11 @@ src/
 │   │   ├── user.types.ts
 │   │   ├── account-state.ts
 │   │   ├── users.module.ts
-│   │   └── *.test.ts
 │   ├── notifications/
 │   │   ├── email-queue.ts
 │   │   ├── email-payload.ts
 │   │   ├── notification.service.ts
-│   │   ├── notifications.module.ts
-│   │   └── *.test.ts
+│   │   └── notifications.module.ts
 │   ├── authentication/
 │   │   ├── admin-auth.controller.ts
 │   │   ├── app-auth.controller.ts
@@ -45,16 +43,14 @@ src/
 │   │   ├── password.ts
 │   │   ├── verification-code.ts
 │   │   ├── token.ts
-│   │   ├── authentication.module.ts
-│   │   └── *.test.ts
+│   │   └── authentication.module.ts
 │   ├── recruitment-cycles/
 │   │   ├── recruitment-cycle.controller.ts
 │   │   ├── recruitment-cycle.service.ts
 │   │   ├── recruitment-cycle.repository.ts
 │   │   ├── recruitment-cycle.schemas.ts
 │   │   ├── recruitment-cycle.routes.ts
-│   │   ├── recruitment-cycles.module.ts
-│   │   └── *.test.ts
+│   │   └── recruitment-cycles.module.ts
 │   ├── registrations/
 │   │   ├── form/
 │   │   ├── public/
@@ -63,30 +59,26 @@ src/
 │   │   ├── registration.repository.ts
 │   │   ├── registration.types.ts
 │   │   ├── registration-validation.ts
-│   │   ├── registrations.module.ts
-│   │   └── *.test.ts
+│   │   └── registrations.module.ts
 │   ├── timeline/
 │   │   ├── timeline.controller.ts
 │   │   ├── timeline.service.ts
 │   │   ├── timeline.repository.ts
 │   │   ├── timeline.schemas.ts
 │   │   ├── timeline.routes.ts
-│   │   ├── timeline.module.ts
-│   │   └── *.test.ts
+│   │   └── timeline.module.ts
 │   └── test-slots/
 │       ├── test-slot.controller.ts
 │       ├── test-slot.service.ts
 │       ├── test-slot.repository.ts
 │       ├── test-slot.schemas.ts
 │       ├── test-slot.routes.ts
-│       ├── test-slots.module.ts
-│       └── *.test.ts
+│       └── test-slots.module.ts
 ├── workers/
 │   └── email/
 │       ├── server.ts
 │       ├── email.worker.ts
-│       ├── smtp-client.ts
-│       └── *.test.ts
+│       └── smtp-client.ts
 ├── common/
 │   ├── errors/
 │   ├── http/
@@ -108,8 +100,8 @@ Controllers translate HTTP requests and responses. Services own business rules. 
 
 ### Folder and code cleanup
 
-- Move corrected user repository, service, types, account-state logic, and tests into `src/modules/users`.
-- Delete the old `src/users` and `src/auth` folders after their useful code and tests have moved.
+- Move corrected user repository, service, types, and account-state logic into `src/modules/users`.
+- Delete the old `src/users` and `src/auth` folders after their useful code has moved.
 - Replace empty module `index.ts` placeholders with module composition functions.
 - Move email normalization into the users module.
 - Move password hashing, code generation, verification hashing, and token generation into authentication.
@@ -157,13 +149,13 @@ Add:
 - Add check constraints for positive test-slot capacity and end time after start time.
 - Regenerate Prisma Client.
 - Update environment examples and the README.
-- Add the required BullMQ, Redis client, Nodemailer, JWT, and HTTP-test dependencies.
+- Add the required BullMQ, Redis client, Nodemailer, and JWT dependencies.
 
-### Phase 0 test gate
+### Phase 0 end-to-end verification gate
 
 - Baseline migration applies to an empty PostgreSQL database.
 - Prisma schema validation and client generation pass.
-- Health tests pass.
+- Health end-to-end scenarios pass against the running API and PostgreSQL.
 - Typecheck and production build pass.
 
 ## 4. Module 1 — Users
@@ -194,7 +186,7 @@ The corrected service must:
 - Support transaction-bound repositories for atomic registration.
 - Expose no standalone public user-creation endpoint.
 
-### Module 1 test gate
+### Module 1 end-to-end verification gate
 
 - Email normalization.
 - Provisional student creation.
@@ -241,8 +233,9 @@ interface EmailPayload {
 - Final failures are logged.
 - PostgreSQL stores no email timestamp, delivery status, send count, or email payload.
 
-### Module 2 test gate
+### Module 2 end-to-end verification gate
 
+- With the local Mailpit SMTP inbox running, enqueue each job type and inspect its delivered message through Mailpit's local HTTP API using `curl`.
 - Both job types produce complete, correct payloads.
 - Registration-success messages contain no verification or payment details.
 - Verification messages contain the generated code.
@@ -303,7 +296,7 @@ Password and token policy:
 
 If verification-email enqueueing fails, invalidate the newly issued code and return a service-unavailable error so the student can request another code.
 
-### Module 3 test gate
+### Module 3 end-to-end verification gate
 
 - Admin seed and login.
 - Wrong password, role, and suspension rejection.
@@ -337,7 +330,7 @@ Implement:
 - Historical-data preservation.
 - Admin-only authorization.
 
-### Module 4 test gate
+### Module 4 end-to-end verification gate
 
 - Creation and duplicate-year rejection.
 - Admin-only access.
@@ -361,7 +354,17 @@ DELETE /api/v1/admin/forms/:formId/fields/:fieldId
 PUT   /api/v1/admin/forms/:formId/fields/order
 ```
 
-Support all PRD field types and validation properties. Once the first submission exists, block field addition, editing, reordering, visibility changes, and deletion.
+Support all PRD field types and validation properties. Fields remain dynamic after submissions exist: admins may add, edit, reorder, activate, deactivate, and restore fields without rewriting historical answers.
+
+Field removal is field-specific:
+
+- Count `FormInputSubmission` rows for the requested `fieldId`.
+- Permanently delete the field when the count is zero.
+- Otherwise set `isActive = false`, preserve the field and its answers, and return `deletionType: "SOFT_DELETE"`.
+
+Do not check the total form submission count, lock the form, create versions, migrate answers, or backfill fields.
+
+Inactive fields are excluded from public form responses, new-submission validation, and new submitted answers. They remain available through historical answer snapshots and can be restored by setting `isActive = true`.
 
 ### Public registration
 
@@ -373,16 +376,18 @@ POST /api/v1/public/registrations
 The backend resolves the active cycle. Submission runs in one transaction:
 
 1. Load the active cycle and form.
-2. Validate student details and all dynamic answers.
+2. Fetch only active fields and validate student details and all dynamic answers.
 3. Normalize college email.
 4. Create or reuse the provisional student.
 5. Update existing student details.
 6. Reject an incompatible identity or duplicate same-cycle registration.
 7. Create the `UNPAID` registration.
-8. Snapshot and store form answers.
+8. Snapshot and store one answer row for each provided active-field answer; do not create rows for omitted optional fields.
 9. Roll back everything on failure.
 
 Students cannot edit submissions in Phase 1.
+
+Historical submission detail uses `FormInputSubmission.fieldKey`, `fieldTitle`, `fieldType`, and `value`, including answers for inactive fields. Current-form comparison fetches active fields, merges answers by `fieldId`, and returns `null` for newly added fields missing from an older submission. It never inserts placeholder answer rows.
 
 ### Admin registration operations
 
@@ -408,11 +413,18 @@ If Redis enqueueing fails after a paid transition, keep the payment update and r
 
 Only paid registrations may receive a decision other than `PENDING`. Applicant responses include the optional decision note.
 
-### Module 5 test gate
+### Module 5 end-to-end verification gate
 
-- Form CRUD, validation, ordering, and locking.
+- Form CRUD, validation, and ordering after submissions exist.
 - Every supported field type and validation rule.
 - Unknown, duplicate, and inactive answers are rejected.
+- Adding fields after submissions without backfilling or invalidating old submissions.
+- Editing labels, types, options, validation, required state, and order after submissions without changing stored snapshots.
+- Permanently deleting a field with no submitted answers.
+- Archiving a field with submitted answers and restoring it later.
+- Excluding inactive fields from public forms and preserving inactive-field historical answers.
+- Returning `null` for a newly added active field in an old submission's current-form comparison view.
+- Enforcing a newly added required field only for new submissions.
 - Atomic user, registration, and answer creation.
 - Duplicate registration and concurrency handling.
 - Registration search, filters, and pagination.
@@ -435,7 +447,7 @@ GET /api/v1/app/timeline
 
 Implement title, description, type, scheduled time, location, meeting link, instructions, visibility, display order, and shared interview-day details. The app receives only visible events for its internally resolved active-cycle paid registration.
 
-### Module 6 test gate
+### Module 6 end-to-end verification gate
 
 - Admin-only mutations.
 - Ordering and cycle isolation.
@@ -470,7 +482,7 @@ Implement:
 - Editing a booked slot's date/time requires explicit admin confirmation.
 - Serialize booking of a slot so concurrent requests cannot overbook it.
 
-### Module 7 test gate
+### Module 7 end-to-end verification gate
 
 - Slot validation, visibility, and ordering.
 - Paid-user, ownership, and cycle checks.
@@ -497,7 +509,7 @@ Return backend-derived:
 
 Do not expose cycle IDs, admin-only fields, password hashes, verification records, internal actor IDs, or queue details.
 
-### Module 8 test gate
+### Module 8 end-to-end verification gate
 
 - Suspended and unpaid access rejection.
 - Pending setup and active account states.
@@ -517,5 +529,4 @@ Phase 1 backend is complete only when:
 - The worker has no Prisma or product-business dependency.
 - Public registration, admin management, paid/unpaid transitions, both email cases, first app login, returning login, timeline, test-slot booking, and final decisions work end to end.
 - No fee or email-delivery data is stored in PostgreSQL.
-- Prisma validation, generated-client consistency, typecheck, all unit/integration/concurrency tests, and production build pass.
-
+- Prisma validation, generated-client consistency, typecheck, all required end-to-end and concurrency scenarios, and production build pass.

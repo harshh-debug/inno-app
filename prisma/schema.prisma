@@ -1,5 +1,4 @@
 // Innogeeks — Prisma schema
-// Web-only registration flow. Form is locked once a submission exists (no versioning system).
 
 generator client {
   provider = "prisma-client"
@@ -120,10 +119,16 @@ model RecruitmentCycle {
 }
 
 // ─────────────────────────────────────────────
-// Dynamic form — one per cycle, locked once any submission exists.
-// Enforcement of "locked" is a SERVICE-LAYER rule, not a DB constraint:
-// before allowing a FormField update/delete/reorder, check
-// RegistrationSubmission count for the cycle == 0.
+// Dynamic registration form — one form per recruitment cycle.
+//
+// Admins may add, edit, reorder, activate, deactivate, and remove fields even
+// after registration submissions exist. Phase 1 implements neither form locking
+// nor form versioning.
+//
+// A field with no submitted answers may be permanently deleted. A field with
+// submitted answers is removed by setting isActive = false, preserving its
+// relation to historical answers. Newly added fields are never backfilled for
+// existing submissions; missing answers are represented as null only in views.
 // ─────────────────────────────────────────────
 
 model Form {

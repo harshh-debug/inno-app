@@ -51,6 +51,8 @@ Owns the application lifecycle: form configuration, public form retrieval, submi
 
 `public` has anonymous form controllers and routes. `admin` has admin operations. Both use the same services and repositories, preventing business rules from diverging.
 
+Form fields remain dynamic after submissions exist. New submissions use only active fields; historical answers use the snapshots stored on `FormInputSubmission`. Removing an unused field deletes it permanently, while removing a field with answers sets `isActive` to `false`. No form locking, versioning, answer migration, or backfilling is used.
+
 Payment stores only `UNPAID`/`PAID` and `paymentStatusUpdatedAt`. An admin can change a registration from `PAID` to `UNPAID` and back to `PAID` to request another registration-success email.
 
 ### `authentication`

@@ -626,9 +626,7 @@ Domain assignment is excluded from Phase 1.
 
 ## 18. Dynamic Registration Form
 
-There is one form for the active recruitment cycle.
-
-Admins can manage fields before the form is locked.
+There is one form for the active recruitment cycle. Admins may manage its fields throughout the recruitment cycle, including after submissions exist.
 
 A form field may contain:
 
@@ -666,31 +664,37 @@ Client-side validation is not authoritative.
 
 ---
 
-## 19. Form Locking and Historical Submissions
+## 19. Dynamic Fields and Historical Submissions
 
-Phase 1 does not implement form versioning.
+Phase 1 does not implement form versioning or form locking. Admins may add, edit, reorder, activate, deactivate, and remove fields after submissions exist.
 
-The form becomes locked after its first registration submission.
+Changes to a field definition affect future form rendering and future submissions only. Existing `FormInputSubmission` rows are never rewritten, migrated, deleted, or backfilled because a field changes.
 
-Once locked, admins cannot:
-
-- Add fields.
-- Edit field meanings.
-- Reorder fields.
-- Enable or disable fields.
-- Delete fields.
-
-This prevents old and new submissions from using different structures without a versioning system.
-
-Every submitted answer should also snapshot:
+Every submitted answer snapshots:
 
 - Field key.
 - Field title.
 - Field type.
+- Value.
 
-This preserves readability if minor non-behavioral metadata changes occur before the form is locked.
+This preserves historical readability when current field metadata changes.
 
-If live form editing during recruitment is required later, introduce proper form versioning in a future phase.
+### Field removal
+
+Field removal depends only on whether that specific `FormField` has submitted answers, not on the total number of registrations for the form.
+
+- If a field has no `FormInputSubmission` rows, permanently delete the `FormField` row.
+- If a field has one or more submitted answers, set `isActive = false` and preserve the field and all answers.
+
+`isActive = false` means the field is archived. It is excluded from public form responses, new-submission validation, and new answers, but remains available for historical submission display. Admins may restore it by setting `isActive = true`.
+
+### New fields and current-form comparison
+
+Adding a field creates only the new `FormField`. Existing submissions do not receive empty answer rows and do not become invalid, even if the new field is required. Required validation applies only to submissions created after the field becomes active.
+
+When an admin compares an old submission against the current active form, the backend merges answers by `fieldId` and returns `null` for an active field with no stored answer. It must not insert placeholder answer rows.
+
+Historical submission views use stored answer snapshots and include answers for inactive fields. They must not be built from only the current active fields.
 
 ---
 
@@ -707,7 +711,7 @@ Admins can:
 - Enable or disable fields.
 - View the current field set.
 
-Changes are blocked after the form receives its first submission.
+Admins may continue to add, edit, reorder, activate, deactivate, and remove fields after submissions exist. Removing a field permanently is allowed only when that field has no submitted answers; otherwise the field is archived by setting `isActive = false`.
 
 ### 20.2 Registrations
 
@@ -877,6 +881,10 @@ A generic audit system may be added later if more detailed history is required.
   The web form, app, and admin panel use the same backend and database.
   Only one user may exist for a normalized email.
   Only one registration may exist for a user in a recruitment cycle.
+  Registration forms remain dynamically editable after submissions exist; there is no form locking or form versioning.
+  Only active form fields appear in new public forms and accept answers in new submissions.
+  A removed field with submitted answers is archived using isActive = false; its historical answers remain visible.
+  Newly added form fields are not backfilled for existing submissions, and missing answers are represented as null only in comparison responses.
   Web registration creates or reuses the user immediately.
   A newly created web user initially has passwordHash = null.
   Every new registration starts with paymentStatus = UNPAID.
@@ -972,6 +980,9 @@ A newly created web user has no password.
 The backend stores the student’s details and submitted form answers.
 The backend creates an unpaid registration for the active recruitment cycle.
 Duplicate users and registrations are prevented.
+Admins can add, edit, reorder, activate, deactivate, and remove form fields after submissions exist.
+Inactive fields are excluded from new submissions while historical answers remain visible.
+Old submissions return null for newly added active fields when compared with the current form.
 Admins can search and inspect registrations.
 Admins can mark registrations paid or unpaid.
 Every UNPAID to PAID transition sends a registration-success email containing app-access instructions.

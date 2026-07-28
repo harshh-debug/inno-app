@@ -12,5 +12,5 @@
     "sourceMap": true,
     "types": ["node"]
   },
-  "include": ["src/**/*.ts", "generated/**/*.ts", "vitest.config.ts"]
+  "include": ["src/**/*.ts", "generated/**/*.ts"]
 }
