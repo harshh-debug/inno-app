@@ -45,7 +45,9 @@ enum RecruitmentDecision {
 }
 
 enum VerificationCodePurpose {
-  ACTIVATION      // sent after admin marks payment PAID; gates password creation
+  // Used only for the paid student's first-login email ownership check.
+  // This is not an activation code.
+  EMAIL_VERIFICATION
   PASSWORD_RESET  // future: forgot-password flow
 }
 
@@ -81,7 +83,6 @@ model User {
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   registrations     RegistrationSubmission[] @relation("Registrant")
-  paymentsVerified  RegistrationSubmission[] @relation("PaymentVerifiedBy")
   decisionsMade     RegistrationSubmission[] @relation("DecisionMadeBy")
   verificationCodes VerificationCode[]
   auditLogsAsActor  AuditLog[]
@@ -92,14 +93,15 @@ model User {
 }
 
 // ─────────────────────────────────────────────
-// Recruitment cycle (batch/year)
+// Recruitment cycle (academic session/year).
+// Cycles are managed by admins and isolate historical recruitment data. Public
+// and app clients do not select a cycle; backend services resolve the active one.
 // ─────────────────────────────────────────────
 
 model RecruitmentCycle {
   id           String  @id @default(uuid()) @db.Uuid
   name         String  @db.VarChar(200)
   academicYear String  @map("academic_year") @db.VarChar(30)
-  feeAmount    Int     @default(50) @map("fee_amount")
   isActive     Boolean @default(false) @map("is_active")
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
@@ -108,8 +110,11 @@ model RecruitmentCycle {
   form           Form?
   registrations  RegistrationSubmission[]
   timelineEvents RecruitmentTimelineEvent[]
+  // Retained future structure; interview booking is not a Phase 1 feature.
   interviewSlots InterviewSlot[]
+  testSlots      TestSlot[]
 
+  @@unique([academicYear])
   @@index([isActive])
   @@map("recruitment_cycles")
 }
@@ -185,11 +190,10 @@ model RegistrationSubmission {
   recruitmentCycleId String @map("recruitment_cycle_id") @db.Uuid
   formId             String @map("form_id") @db.Uuid
 
-  paymentStatus       PaymentStatus @default(UNPAID) @map("payment_status")
-  paymentVerifiedAt   DateTime?     @map("payment_verified_at") @db.Timestamptz(3)
-  paymentVerifiedById String?       @map("payment_verified_by_id") @db.Uuid
-  paymentReference    String?       @map("payment_reference") @db.VarChar(200)
-  paymentNote         String?       @map("payment_note") @db.Text
+  // Phase 1 intentionally stores no fee amount, payment reference, note, or
+  // verifier. The timestamp changes only when the admin changes payment state.
+  paymentStatus          PaymentStatus @default(UNPAID) @map("payment_status")
+  paymentStatusUpdatedAt DateTime      @default(now()) @map("payment_status_updated_at") @db.Timestamptz(3)
 
   decision     RecruitmentDecision @default(PENDING)
   decisionNote String?             @map("decision_note") @db.Text
@@ -202,11 +206,12 @@ model RegistrationSubmission {
   user              User             @relation("Registrant", fields: [userId], references: [id], onDelete: Restrict)
   recruitmentCycle  RecruitmentCycle @relation(fields: [recruitmentCycleId], references: [id], onDelete: Restrict)
   form              Form             @relation(fields: [formId], references: [id], onDelete: Restrict)
-  paymentVerifiedBy User?            @relation("PaymentVerifiedBy", fields: [paymentVerifiedById], references: [id], onDelete: SetNull)
   decidedBy         User?            @relation("DecisionMadeBy", fields: [decidedById], references: [id], onDelete: SetNull)
 
-  formInputs  FormInputSubmission[]
-  slotBooking SlotBooking?
+  formInputs      FormInputSubmission[]
+  // Future interview booking retained but unused by Phase 1.
+  slotBooking     SlotBooking?
+  testSlotBooking TestSlotBooking?
 
   @@unique([userId, recruitmentCycleId])
   @@index([recruitmentCycleId, paymentStatus])
@@ -235,7 +240,7 @@ model FormInputSubmission {
 }
 
 // ─────────────────────────────────────────────
-// Email verification / activation codes
+// Email verification codes
 // ─────────────────────────────────────────────
 
 model VerificationCode {
@@ -295,7 +300,46 @@ model RecruitmentTimelineEvent {
 }
 
 // ─────────────────────────────────────────────
-// Interview slot booking
+// Test-slot booking — Phase 1 model.
+// Capacity is validated at the service layer by counting bookings. Each
+// registration can select one test slot in its own recruitment cycle.
+// ─────────────────────────────────────────────
+
+model TestSlot {
+  id                 String   @id @default(uuid()) @db.Uuid
+  recruitmentCycleId String   @map("recruitment_cycle_id") @db.Uuid
+  startTime          DateTime @map("start_time") @db.Timestamptz(3)
+  endTime            DateTime @map("end_time") @db.Timestamptz(3)
+  order              Int
+  isVisible          Boolean  @default(false) @map("is_visible")
+  capacity           Int      @default(1)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  recruitmentCycle RecruitmentCycle @relation(fields: [recruitmentCycleId], references: [id], onDelete: Restrict)
+  bookings         TestSlotBooking[]
+
+  @@unique([recruitmentCycleId, order])
+  @@index([recruitmentCycleId, isVisible, order])
+  @@map("test_slots")
+}
+
+model TestSlotBooking {
+  id           String   @id @default(uuid()) @db.Uuid
+  submissionId String   @unique @map("submission_id") @db.Uuid
+  testSlotId   String   @map("test_slot_id") @db.Uuid
+  bookedAt     DateTime @default(now()) @map("booked_at") @db.Timestamptz(3)
+
+  submission RegistrationSubmission @relation(fields: [submissionId], references: [id], onDelete: Restrict)
+  testSlot   TestSlot               @relation(fields: [testSlotId], references: [id], onDelete: Restrict)
+
+  @@index([testSlotId])
+  @@map("test_slot_bookings")
+}
+
+// ─────────────────────────────────────────────
+// Interview slot booking — future structure retained but unused in Phase 1.
 // Admin pre-creates fixed slots (date/time/capacity/interviewer);
 // student books one open slot. Capacity is enforced at the service layer
 // by counting active (non-cancelled) SlotBooking rows against slot.capacity.

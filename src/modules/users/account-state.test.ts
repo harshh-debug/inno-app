@@ -12,7 +12,7 @@ describe("deriveAccountState", () => {
     ).toBe("PENDING_PASSWORD_SETUP");
   });
 
-  it("keeps app signups pending email verification", () => {
+  it("keeps an incomplete password account pending email verification", () => {
     expect(
       deriveAccountState({
         isSuspended: false,

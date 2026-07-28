@@ -1,4 +1,4 @@
-import type { User } from "../../generated/prisma/client.js";
+import type { User } from "../../../generated/prisma/client.js";
 import { describe, expect, it, vi } from "vitest";
 import { UserService } from "./user.service.js";
 import type { UserRepository } from "./user.types.js";
@@ -19,10 +19,6 @@ function createUser(overrides: Partial<User> = {}): User {
     year: null,
     createdAt: new Date("2026-01-01T00:00:00.000Z"),
     updatedAt: new Date("2026-01-01T00:00:00.000Z"),
-    // registrations: [],
-    // verificationCodes: [],
-    // paymentsVerified: [],
-    // decisionsMade: [],
     ...overrides,
   };
 }

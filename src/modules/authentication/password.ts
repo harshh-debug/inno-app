@@ -1,4 +1,4 @@
-import { createHash, randomBytes, scrypt as scryptCallback, timingSafeEqual } from "node:crypto";
+import { randomBytes, scrypt as scryptCallback, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
 
 const scrypt = promisify(scryptCallback);
@@ -22,12 +22,4 @@ export async function verifyPassword(password: string, storedHash: string): Prom
   const actualDerivedKey = (await scrypt(password, salt, expectedDerivedKey.length)) as Buffer;
 
   return expectedDerivedKey.length === actualDerivedKey.length && timingSafeEqual(expectedDerivedKey, actualDerivedKey);
-}
-
-export function hashVerificationValue(value: string): string {
-  return createHash("sha256").update(value).digest("base64url");
-}
-
-export function normalizeEmail(email: string): string {
-  return email.trim().toLowerCase();
 }

@@ -1,4 +1,7 @@
+# pnpm 11 stores build-script approvals here. No `packages` key is declared,
+# so this repository remains a single project rather than a pnpm workspace.
 allowBuilds:
   '@prisma/engines': true
   esbuild: true
+  msgpackr-extract: true
   prisma: true

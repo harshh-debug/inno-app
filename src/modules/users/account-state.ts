@@ -11,8 +11,8 @@ export interface AccountStateInput {
 }
 
 /**
- * Derives account readiness from persisted account facts. This intentionally
- * avoids a duplicate account-status column that could become inconsistent.
+ * Derives account readiness from persisted facts instead of storing another
+ * status column that could contradict password, verification, or suspension.
  */
 export function deriveAccountState(account: AccountStateInput): DerivedAccountState {
   if (account.isSuspended) {

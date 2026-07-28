@@ -2,65 +2,50 @@
 
 ## 1. Document Purpose
 
-This document defines the current product behavior, backend-facing requirements, user states, and business rules for the Innogeeks platform.
+This document is the product source of truth for Phase 1 of the Innogeeks first-year recruitment platform.
 
-It is the product source of truth for:
+Phase 1 covers:
 
-- First-year student onboarding.
-- Web and app registration.
-- Email verification.
-- Password setup.
-- Manual payment verification.
-- Paid-user access.
-- Recruitment timelines.
-- Selection.
-- Domain assignment.
-- Admin responsibilities.
-- Future coordinator, resource, session, and attendance features.
+- Public web registration.
+- Creation of first-year users in the shared database.
+- Manual payment verification by admins.
+- Registration-success email after an admin marks the registration paid.
+- Paid-only app login.
+- First-login email verification and password setup.
+- Recruitment timeline.
+- Test-slot booking.
+- Final recruitment decision.
+- Admin operations required for these flows.
 
-This document does not define mobile UI layouts, navigation styling, or visual design.
+Coding agents must consult this document whenever product behavior is unclear.
 
-Coding agents should consult this file whenever product behavior is unclear or when a task affects registration, authentication, payment, recruitment, selection, or domain assignment.
+This document intentionally does not define mobile UI layouts or visual design.
 
 ---
 
 ## 2. Product Summary
 
-Innogeeks is a technical club platform used to manage first-year recruitment and, later, internal club operations.
+Innogeeks is building a platform to manage first-year student recruitment.
 
-The platform has three clients:
+There are three clients:
 
-1. The mobile app.
-2. The Next.js admin panel.
-3. The public web registration form.
+1. Public web registration form.
+2. First-year mobile app.
+3. Next.js admin panel.
 
-All three clients use the same backend and the same PostgreSQL database.
+All clients use:
 
-The current implementation priority is:
+- One Express.js backend.
+- One PostgreSQL database.
+- The same user and registration records.
 
-- First-year student account creation.
-- Dynamic registration forms.
-- Web and app registration.
-- Manual payment verification.
-- Email-code verification.
-- Password setup.
-- Paid-user access.
-- Recruitment timeline.
-- Final selection.
-- Domain assignment.
+There is no app-based registration or signup flow in Phase 1.
 
-Later phases may include:
-
-- Coordinator resource sharing.
-- Session creation.
-- Attendance.
-- Attendance analytics.
+Every first-year student must first register through the public web form. The app is used only after an admin has verified payment and marked the registration as paid.
 
 ---
 
 ## 3. High-Level User Types
-
-The platform has three high-level user types:
 
 ```text
 FIRST_YEAR_STUDENT
@@ -70,76 +55,70 @@ ADMIN
 
 These are platform roles.
 
-Payment, registration, and selection are separate states and must not be represented as roles.
+The following are states, not roles:
+
+- Registered.
+- Unpaid.
+- Paid.
+- Selected.
+- Waitlisted.
+- Rejected.
+
+Do not create roles such as:
+
+```text
+PAID_USER
+UNPAID_USER
+SELECTED_USER
+```
+
+### 3.1 First-Year Student
+
+Phase 1 recruitment flows apply only to first-year students.
+
+A first-year student:
+
+- Registers through the public web form.
+- Is initially unpaid.
+- Is manually marked paid by an admin.
+- Receives a registration-success email.
+- Logs into the app using the registered email.
+- Verifies the email and creates a password on first login.
+- Views the recruitment timeline.
+- Books a test slot.
+- Later sees the final recruitment decision.
+
+### 3.2 Coordinator
+
+Coordinator functionality is deferred.
+
+Future coordinator features may include:
+
+- Attendance.
+- Resource sharing.
+- Sessions.
+- Domain-specific operations.
+
+Coordinators do not use the first-year registration and payment flow.
+
+### 3.3 Admin
+
+Admins use the Next.js admin panel.
+
+In Phase 1, admins manage:
+
+- Dynamic web registration fields.
+- Registered first-year users.
+- Paid and unpaid state.
+- Recruitment timeline details.
+- Test slots.
+- Final selected, waitlisted, or rejected decisions.
+
+Domain assignment is excluded from Phase 1.
 
 ---
 
-## 4. First-Year Student
-
-A first-year student may:
-
-- Fill the public web registration form.
-- Create an account directly in the mobile app.
-- Verify their email.
-- Complete password setup.
-- Submit the Join Innogeeks registration form.
-- Complete the registration-fee payment.
-- Become a paid user after admin verification.
-- View the recruitment timeline.
-- Participate in tests and interviews.
-- Receive a final decision.
-- Receive domain assignments if selected.
-
-All onboarding, payment, recruitment, and selection flows in this document apply only to first-year students.
-
----
-
-## 5. Coordinator
-
-A coordinator is generally a second-year student associated with one or more Innogeeks domains.
-
-Future coordinator capabilities may include:
-
-- Publishing resources.
-- Creating classes or sessions.
-- Selecting the session domain.
-- Marking which coordinators were present.
-- Recording attendance for selected first-year students.
-
-Coordinators do not use:
-
-- The first-year Join Innogeeks registration form.
-- The first-year payment flow.
-- The first-year recruitment timeline.
-- The first-year selection process.
-
-Coordinator provisioning is outside the current phase.
-
----
-
-## 6. Admin
-
-An admin is an authorized platform operator using the Next.js admin panel.
-
-Admins currently manage:
-
-- Dynamic registration-form definitions.
-- First-year student records.
-- Registration submissions.
-- Manual payment verification.
-- Registration email corrections.
-- Test and interview details.
-- Final decisions.
-- Domain assignments.
-- Relevant audit history.
-
-All admin permissions must be enforced by the backend.
-
-The admin panel is only a client and must not contain authoritative business rules.
-
----
-
-## 7. Technical Direction
+## 4. Technical Direction
 
 Use:
 
@@ -147,903 +126,480 @@ Use:
 - Express.js.
 - Prisma.
 - PostgreSQL.
-- pnpm.
+- Next.js for the admin panel.
+- pnpm as the package manager.
 
-Use `pnpm`, not `npm`.
+This is not a monorepo.
 
-The backend is a single modular monolith.
+Do not introduce:
 
-It owns:
+- pnpm workspaces.
+- A packages-based monorepo structure.
+- Multiple business services without a real requirement.
 
-- API routes.
-- Authentication.
-- Authorization.
-- Business logic.
-- Prisma.
-- PostgreSQL access.
-- Dynamic forms.
-- User records.
-- Student profiles.
-- Registration records.
-- Payment state.
-- Email-code generation.
-- Password setup.
-- Recruitment timelines.
-- Selection.
-- Domain assignment.
-- Admin operations.
-- Audit logging.
+The backend is one modular monolith.
 
-There is a separate lightweight email worker.
+Although it uses Express.js, code should follow a modular, class-based style similar to NestJS:
 
-The email worker only sends emails.
+```text
+controller -> service -> repository
+```
 
-It must not:
+Use:
+
+- Controller classes.
+- Service classes.
+- Repository classes.
+- Constructor-injected dependencies.
+- Separate modules for separate business areas.
+
+Prisma calls should remain inside repositories or the established data-access layer.
+
+A separate lightweight email worker only sends emails.
+
+The worker must not:
 
 - Access PostgreSQL.
 - Use Prisma.
 - Decide whether an email should be sent.
-- Verify payments.
-- Create users.
-- Update passwords.
-- Change registration state.
-- Change recruitment decisions.
-- Assign domains.
+- Change payment state.
+- Create or update users.
+- Verify login eligibility.
+- Change recruitment state.
 
-The main backend prepares the email payload and passes it to the worker through the transport chosen by the project.
+The backend prepares a complete email payload and sends it to the worker.
 
 ---
 
-## 8. Shared Database Model
+## 5. Shared Database and Identity
 
-The web form, mobile app, and admin panel all use the same backend and the same PostgreSQL database.
+The web form, app, and admin panel use the same backend and PostgreSQL database.
 
-There are no separate web and app user databases.
+When a first-year student submits the web form, the backend immediately creates or reuses a `User` record.
 
-A first-year student's identity must remain the same regardless of whether they begin from the web form or the mobile app.
+The normalized email is the identity-matching key.
 
-The normalized email address is the main identity-matching key for first-year onboarding.
-
-Duplicate users must not be created for the same normalized email.
-
----
-
-## 9. Core Product Distinctions
-
-The following concepts are separate:
-
-- User database record.
-- Login-enabled account.
-- Email verification.
-- Password setup.
-- Student profile.
-- Registration submission.
-- Payment state.
-- Paid-user access.
-- Recruitment decision.
-- Domain assignment.
-- Platform role.
-
-Do not collapse them into one status.
-
-Examples:
-
-- A user can exist without a password.
-- A user can exist with an unverified email.
-- A user can have an active account but no registration for the current cycle.
-- A registered user can remain unpaid.
-- A paid user can remain pending in recruitment.
-- A selected user can remain without a final domain assignment.
-
----
-
-## 10. Recruitment Cycles
-
-Recruitment should be modeled by cycle.
-
-A cycle may contain:
-
-- Name.
-- Academic year.
-- Registration start and end dates.
-- Registration fee.
-- Active form version.
-- Test details.
-- Interview details.
-- Decision period.
-- Status.
-
-Suggested cycle states:
+Example normalization:
 
 ```text
-DRAFT
-ACTIVE
-COMPLETED
-ARCHIVED
+Student@Example.com -> student@example.com
 ```
 
-The current registration fee is expected to be ₹50, but it should remain configurable per cycle.
+Only one user may exist for a normalized email.
 
-A first-year student should normally have only one registration per recruitment cycle.
+A new web-created user starts with:
 
----
+```text
+role = FIRST_YEAR_STUDENT
+passwordHash = null
+emailVerifiedAt = null
+isSuspended = false
+```
 
-## 11. Registration Channels
+The same operation also creates:
 
-First-year students may register through:
+- The student's basic details.
+- A registration submission for the active recruitment cycle.
+- The submitted form answers.
+- An initial payment status of `UNPAID`.
 
-1. The public web registration form.
-2. The mobile app.
-
-Both channels use:
-
-- The same backend.
-- The same PostgreSQL database.
-- The same active form definition.
-- The same validation rules.
-- The same recruitment cycle.
-
-The web form does not require login.
-
-The app requires account creation and email verification before showing the Join Innogeeks form.
+The app must never create another user for the same registered email.
 
 ---
 
-# 12. First-Year Flow A: Public Web Registration
+## 6. Recruitment Cycle
 
-## 12.1 Web Form Submission
+A recruitment cycle represents one first-year recruitment round, such as:
+
+```text
+Innogeeks Recruitment 2026–27
+```
+
+It groups:
+
+- The active registration form.
+- All registrations for that recruitment round.
+- Recruitment timeline events.
+- Test slots.
+- Final decisions.
+
+Only one recruitment cycle should normally be active at a time.
+
+Recruitment cycles are administered through the admin panel and used internally
+by the backend to keep historical data separate. The public website and app do
+not select or receive a recruitment-cycle identifier.
+
+A user may have only one registration submission in a particular recruitment cycle.
+
+---
+
+# 7. Authoritative First-Year Flow
+
+## 7.1 Web Registration
 
 The student fills the public web registration form without logging in.
 
-The form may contain:
+The backend:
 
-- Full name.
-- Email.
-- Phone.
-- Batch or year.
-- Domain interests.
-- Short-answer questions.
-- Other active dynamic fields.
+1. Normalizes the submitted email.
+2. Finds an existing user with that normalized email.
+3. Creates a new provisional first-year user if none exists.
+4. Stores or updates the student's basic details.
+5. Creates a registration submission for the active recruitment cycle.
+6. Stores each submitted answer.
+7. Sets payment status to `UNPAID`.
 
-When the form is submitted, the backend performs one controlled operation:
-
-1. Normalize the submitted email.
-2. Find an existing user with that email.
-3. Create a new provisional user if none exists.
-4. Create or update the student's profile where appropriate.
-5. Create the registration for the active recruitment cycle.
-6. Link the registration to the user.
-7. Store the exact submitted answers and form version.
-
-At this stage:
+Initial state:
 
 ```text
 User exists
-Role = FIRST_YEAR_STUDENT
 Registration exists
-Registration is linked to the user
-Payment status = UNPAID
-Email may be unverified
-Password may be absent
-Account may be pending setup
+passwordHash = null for a new web user
+emailVerifiedAt = null for a new web user
+paymentStatus = UNPAID
 ```
 
-For a new web-created user:
+If the user already has a registration for the active cycle, reject the duplicate submission.
 
-```text
-passwordHash = null
-emailVerified = false
-accountStatus = PENDING_PASSWORD_SETUP
-```
+## 7.2 Manual Payment
 
-The student should not be able to log in with a password until password setup is completed.
-
-## 12.2 Existing User During Web Submission
-
-If a user already exists with the submitted email:
-
-- Reuse the existing user.
-- Do not create another user.
-- Check whether a registration already exists for the active cycle.
-- Reject a duplicate registration for the same cycle.
-- Create the new registration only if none exists.
-
-If the existing account already has a verified email and password, the student can later log in normally after payment is marked paid.
-
-## 12.3 Web Submission Data
-
-The backend stores both:
-
-- Current profile information.
-- Historical registration answers.
-
-The profile may contain current reusable fields such as:
-
-- Full name.
-- Phone.
-- Batch.
-- Year.
-
-The registration stores the exact submitted values for that cycle.
-
-This intentional duplication preserves historical accuracy if the student changes profile information later.
-
----
-
-## 13. Admin Payment Verification for Web Registration
-
-The student pays the registration fee outside the platform.
-
-For the current phase, payment verification is manual.
-
-The admin:
-
-1. Searches for the user or registration.
-2. Opens registration details.
-3. Confirms payment.
-4. Marks the registration as paid.
-5. Optionally records a payment reference or note.
-
-The backend records:
-
-- Previous payment state.
-- New payment state.
-- Admin actor.
-- Verification timestamp.
-- Verification source.
-- Optional note.
-- Optional payment reference.
-
-Suggested verification source:
-
-```text
-ADMIN
-```
-
-A future payment gateway may use:
-
-```text
-PAYMENT_GATEWAY
-```
-
-After a web-created user's registration is marked paid, the backend may immediately send a verification code or make it available for resend when the user starts the app flow. The exact trigger may remain configurable.
-
----
-
-# 14. Web-Created User Opens the App
-
-The student opens the mobile app and enters the same email used in the web registration.
-
-The backend checks:
-
-- Whether a user exists for the normalized email.
-- Whether a registration exists for the active cycle.
-- Whether the registration is paid.
-- Whether the email is verified.
-- Whether a password exists.
-- Whether the account is active or pending setup.
-
-There are two main branches.
-
----
-
-## 15. Web-Created User Without a Password
-
-If the user exists but no password has been set:
-
-```text
-Student enters registered email
-  -> backend finds existing provisional user
-  -> verification code is sent or re-sent
-  -> student enters verification code
-  -> backend verifies email ownership
-  -> backend issues short-lived password-setup authorization
-  -> create-password screen is shown
-  -> student sets password
-  -> existing user record is updated
-  -> email becomes verified
-  -> account becomes ACTIVE
-  -> paid-user access is granted
-```
-
-The backend must not create another user.
-
-The student must not re-enter:
-
-- Full name.
-- Phone.
-- Batch.
-- Domain interests.
-- Registration answers.
-
-Those details already exist in the shared database.
-
-The final password-setup operation should:
-
-- Validate the setup authorization.
-- Hash the password.
-- Update the existing user.
-- Mark the email verified.
-- Mark the account active.
-- Consume the verification code or setup token.
-- Record activation time.
-- Preserve the existing profile and registration.
-
-Where practical, these changes should be completed atomically.
-
----
-
-## 16. Interrupted Password Setup
-
-The student may verify the code and close the app before creating a password.
-
-To support this safely:
-
-- Issue a short-lived password-setup token after successful code verification.
-- Do not require the student to refill the registration form.
-- Do not create a second user.
-- Require the setup token when creating the password.
-- Allow the student to restart verification if the token expires.
-
-The system should not leave an unusable duplicate or partially created account.
-
----
-
-## 17. Web-Created User With an Existing Password
-
-A user may already have a password because:
-
-- They previously created an app account with the same email.
-- They completed account setup earlier.
-- They already participated in another supported platform flow.
-
-In this case:
-
-```text
-Student enters email
-  -> backend detects password exists
-  -> student enters existing password
-  -> backend authenticates user
-  -> backend confirms the paid registration belongs to the same user
-  -> paid-user access is granted
-```
-
-Do not:
-
-- Create another user.
-- Create another registration.
-- Ask the student to refill their details.
-
-If the account email is not verified, require email verification before granting access.
-
----
-
-# 18. First-Year Flow B: App Signup
-
-## 18.1 Account Creation
-
-A new student opens the app and chooses normal signup.
-
-The student provides:
-
-- Email.
-- Password.
-- Password confirmation.
-
-The backend:
-
-1. Normalizes the email.
-2. Checks for an existing user.
-3. Creates a new user only if none exists.
-4. Stores the password hash.
-5. Marks the account as pending email verification.
-6. Sends an email verification code.
-
-For a normal app-created user:
-
-```text
-passwordHash = set
-emailVerified = false
-accountStatus = PENDING_EMAIL_VERIFICATION
-role = FIRST_YEAR_STUDENT
-```
-
-## 18.2 Existing Web-Created User During App Signup
-
-If normal signup uses an email that already exists from the web form:
-
-- Do not create another user.
-- Detect whether a password exists.
-- Detect whether the registration has been marked paid.
-
-If no password exists:
-
-```text
-Existing provisional user found
-  -> route to verification-code flow
-  -> verify email
-  -> create password
-  -> activate existing account
-```
-
-If a password already exists:
-
-```text
-Existing active user found
-  -> route to normal login
-```
-
-## 18.3 Email Verification
-
-The student enters the email verification code.
-
-On success:
-
-- The email becomes verified.
-- The account becomes active.
-- The student is authenticated.
-- The student enters the app.
-
-This code is used for email verification.
-
-It does not mark the user paid.
-
----
-
-## 19. App Registration
-
-After app login, the backend checks whether the user has a registration for the active cycle.
-
-If no registration exists, the app shows the Join Innogeeks form.
-
-The student fills and submits the form.
-
-The backend:
-
-1. Validates answers against the active form version.
-2. Creates the registration.
-3. Links it to the authenticated user.
-4. Creates or updates the student profile.
-5. Sets payment state to `UNPAID`.
-
-At this stage:
-
-```text
-User exists
-Password exists
-Email is verified
-Registration exists
-Registration is linked
-Payment status = UNPAID
-```
-
-No additional activation or claim code is required later.
-
----
-
-## 20. Admin Marks App Registration Paid
+There is no payment-gateway integration in Phase 1.
 
 The student pays outside the platform.
 
-The admin finds the linked registration and marks it paid.
+An admin searches for the registration and changes its payment state.
 
-Because:
+Supported actions:
 
-- The user account already exists.
-- The password already exists.
-- The email is already verified.
-- The registration is already linked.
+- Mark as paid.
+- Mark as unpaid.
 
-No additional email code is needed.
+Marking a registration unpaid should require a confirmation dialog in the admin panel to prevent accidental changes.
 
-After the admin marks the registration paid, the backend state changes immediately.
+The backend remains responsible for validating and applying the state transition.
 
-The app changes its experience after fetching the latest state.
+## 7.3 Registration-Success Email
 
----
+When a registration transitions from `UNPAID` to `PAID`, the backend sends a registration-success email.
 
-## 21. Paid-User UI Refresh
+The email may include:
 
-The mobile app should refresh the first-year student's current state:
+- Confirmation that registration was completed successfully.
+- Instructions to install or open the Innogeeks app.
+- A link to download or access the app.
+- A note to log in using the same registered email.
 
-- On login.
-- When the app opens.
-- When the app returns to the foreground.
-- When the payment-pending screen opens.
-- On manual refresh.
+This email does not contain an activation code.
 
-WebSockets are not required for the first version.
+This email does not verify the user's email.
 
-The backend should expose a structured state endpoint so the app does not reconstruct the user's state from many unrelated calls.
+This email does not set the user's password.
 
-Example conceptual response:
-
-```json
-{
-  "role": "FIRST_YEAR_STUDENT",
-  "accountStatus": "ACTIVE",
-  "emailVerified": true,
-  "registration": {
-    "status": "SUBMITTED",
-    "paymentStatus": "PAID",
-    "decision": "PENDING"
-  },
-  "access": {
-    "canViewRecruitmentTimeline": true
-  }
-}
-```
+Every real `UNPAID` to `PAID` transition sends this email. An admin may retry a
+missing email by marking the registration `UNPAID` and then marking it `PAID`
+again. Repeating the same status does not send an email.
 
 ---
 
-## 22. Unified Email-Code System
+## 8. App Email Gate
 
-Use one technical email-code mechanism.
+There is no signup option in the app.
 
-The same code service may support multiple purposes:
+The first-year student starts by entering the email used in the web registration.
 
-```text
-EMAIL_VERIFICATION
-PASSWORD_SETUP
-PASSWORD_RESET
-```
+The backend checks:
 
-The user-facing code may look identical, but every code record must have a purpose and context.
+1. A user exists for the normalized email.
+2. A registration exists for the active recruitment cycle.
+3. The registration is marked `PAID`.
+4. The user is not suspended.
 
-A code created for one purpose must not work for another.
+If any required condition fails, app login is blocked.
 
 Examples:
 
-- App signup uses `EMAIL_VERIFICATION`.
-- Web-created user activation may use `PASSWORD_SETUP`.
-- Password recovery uses `PASSWORD_RESET`.
+```text
+No registered user -> block
+Registered but UNPAID -> block
+Registration rejected or unavailable -> block
+Suspended user -> block
+Registered and PAID -> continue
+```
 
-Do not create separate technical code systems unless a future requirement requires it.
+Only paid registered users may enter the login or first-time password-setup flow.
 
 ---
 
-## 23. Email-Code Requirements
+## 9. First-Time Login: Email Verification and Password Setup
 
-Every email code must:
+There is no activation code in the product.
 
+If the paid registered user has:
+
+```text
+passwordHash = null
+```
+
+the app starts first-time email verification.
+
+Flow:
+
+```text
+Student enters registered email
+  -> backend confirms registered + PAID
+  -> backend sends an email verification code
+  -> student enters the code
+  -> backend verifies the code
+  -> backend issues short-lived password-setup authorization
+  -> student creates a password
+  -> passwordHash is stored
+  -> emailVerifiedAt is set
+  -> student is logged in
+```
+
+The verification code proves that the student controls the registered email address.
+
+It is not an activation code and must not be described as one in APIs, schemas, emails, or UI copy.
+
+The system must update the existing web-created user. It must not create a new user or registration.
+
+---
+
+## 10. Returning Login
+
+If the paid registered user already has:
+
+```text
+passwordHash != null
+```
+
+the app skips email-code verification and shows the password screen directly.
+
+Flow:
+
+```text
+Student enters registered email
+  -> backend confirms registered + PAID
+  -> backend detects password exists
+  -> student enters password
+  -> backend authenticates user
+  -> student enters the app
+```
+
+If the registration is later changed to `UNPAID`, the user must no longer pass the paid-user gate even if the password is correct.
+
+Payment status is therefore checked before both first-time setup and returning login.
+
+---
+
+## 11. Email Verification Code
+
+Phase 1 uses an email verification code only for first-time password setup.
+
+Suggested purpose:
+
+```text
+EMAIL_VERIFICATION
+```
+
+A future forgot-password flow may use:
+
+```text
+PASSWORD_RESET
+```
+
+Every code must:
+
+- Be tied to the user and normalized email.
 - Be generated securely.
-- Be tied to a normalized email or user ID.
-- Have a clear purpose.
+- Be stored only as a hash.
 - Have an expiry time.
-- Be stored as a hash.
+- Have a resend cooldown.
 - Limit invalid attempts.
-- Enforce resend cooldown.
-- Invalidate previous active codes when reissued.
+- Be invalidated when a newer code is issued.
 - Be consumed after successful verification.
-- Never be logged in raw form.
-- Never be returned by admin APIs.
+- Never be stored or logged in raw form.
+- Never be exposed through admin APIs.
 
-For web-created users, the backend must recheck the current registration and payment state before allowing password setup and paid access.
+A code created for email verification must not be accepted for password reset.
 
-If payment is reversed before account setup completes, the setup flow must stop granting paid access.
-
----
-
-## 24. Suggested User and Recruitment States
-
-Exact enum names may follow the implementation, but the following distinctions must remain.
-
-### Platform Role
-
-```text
-FIRST_YEAR_STUDENT
-COORDINATOR
-ADMIN
-```
-
-### Account Status
-
-```text
-PENDING_EMAIL_VERIFICATION
-PENDING_PASSWORD_SETUP
-ACTIVE
-SUSPENDED
-```
-
-### Email Verification
-
-```text
-UNVERIFIED
-VERIFIED
-```
-
-### Password Setup
-
-This may be derived from whether `passwordHash` exists.
-
-Conceptually:
-
-```text
-NOT_SET
-SET
-```
-
-### Registration Status
-
-```text
-NOT_STARTED
-DRAFT
-SUBMITTED
-```
-
-### Payment Status
-
-```text
-UNPAID
-PAID
-REJECTED
-```
-
-### Recruitment Decision
-
-```text
-PENDING
-SELECTED
-WAITLISTED
-REJECTED
-```
-
-Do not create roles called:
-
-```text
-UNPAID_USER
-PAID_USER
-SELECTED_USER
-```
-
-These are product states, not platform roles.
+Before accepting the code, the backend must recheck that the registration remains `PAID`.
 
 ---
 
-## 25. Dynamic Registration Form
+## 12. Password-Setup Authorization
 
-The registration form is controlled from the admin panel.
+Successful email-code verification should not directly accept a password in the same unprotected request.
 
-The same form definition is used by:
+After the code is verified, the backend issues a short-lived, hashed, single-use password-setup authorization.
 
-- The public web form.
-- The mobile app.
+The authorization must:
 
-The backend is the source of truth for:
+- Be scoped to the user.
+- Have an expiry time.
+- Be single use.
+- Be stored as a hash if persisted.
+- Be invalidated after password creation.
+- Not be logged in raw form.
 
-- Field key.
-- Label.
-- Description.
-- Field type.
-- Required state.
-- Options.
-- Validation rules.
-- Display order.
-- Active state.
+When the password is submitted, the backend checks:
 
-Possible field types include:
+- The authorization is valid.
+- The user still has no password.
+- The registration is still `PAID`.
+- The user is not suspended.
 
-- Short text.
-- Long text.
-- Email.
-- Phone.
-- Number.
-- Date.
-- Single select.
-- Multi-select.
-- Checkbox.
+Interrupted setup must be recoverable:
 
-File upload should only be added when explicitly required.
+- If the authorization is still valid, the student may continue setting the password.
+- If it has expired, the student repeats email verification.
 
 ---
 
-## 26. Form Versioning
+## 13. Derived Account State
 
-Published forms must be versioned.
+Do not store a separate account-status column if it can contradict actual account fields.
 
-Every registration must reference the exact form version used when submitted.
-
-Changing the active form must not modify or invalidate previous submissions.
-
-Admins may:
-
-- Create draft versions.
-- Add fields.
-- Edit fields.
-- Reorder fields.
-- Disable fields.
-- Publish a version.
-- Archive older versions.
-
-The backend validates every registration submission against the referenced form version.
-
----
-
-## 27. Registration Validation
-
-The backend must validate:
-
-- Required fields.
-- Data types.
-- Allowed select values.
-- Length limits.
-- Number limits.
-- Date rules.
-- Email format.
-- Phone format where applicable.
-- Duplicate user rules.
-- Duplicate registration rules.
-
-Client-side validation is only for user experience.
-
-The backend remains the final authority.
-
----
-
-## 28. Duplicate and Conflict Rules
-
-### 28.1 Duplicate User
-
-Only one user should exist for a normalized email.
-
-Examples such as:
+Derive state from:
 
 ```text
-Student@Example.com
-student@example.com
+passwordHash
+emailVerifiedAt
+isSuspended
 ```
 
-must be treated as the same email.
-
-### 28.2 Duplicate Registration
-
-Only one registration should normally exist for:
+Conceptual logic:
 
 ```text
-user + recruitment cycle
+isSuspended = true
+  -> SUSPENDED
+
+passwordHash = null
+  -> PENDING_PASSWORD_SETUP
+
+passwordHash exists and emailVerifiedAt = null
+  -> PENDING_EMAIL_VERIFICATION
+
+passwordHash exists and emailVerifiedAt exists
+  -> ACTIVE
 ```
 
-A second submission should be rejected or routed to the existing registration.
-
-### 28.3 Existing User Submits Web Form
-
-If a user already exists with the web-form email:
-
-- Reuse the existing user.
-- Do not create another user.
-- Create the registration only if none exists for the active cycle.
-
-### 28.4 Existing Registration During App Flow
-
-If a registration already exists for the authenticated user and active cycle:
-
-- Do not show a blank Join form.
-- Return the current registration and payment state.
-- Do not create another registration.
-
-### 28.5 Email Correction
-
-Admins may correct a registration email before account setup is completed.
-
-Such corrections must:
-
-- Be authorized.
-- Be audited.
-- Recheck for duplicate users.
-- Update the user email where appropriate.
-- Update canonical registration email where appropriate.
-- Invalidate active verification codes.
-- Send future codes only to the corrected address.
-
-After the account is active, email changes should follow a dedicated account-email-change flow.
+For the finalized web-only flow, a newly registered student normally begins in `PENDING_PASSWORD_SETUP`.
 
 ---
 
-## 29. Payment Verification
+## 14. Post-Login Recruitment Experience
 
-Payment state belongs to the registration for a recruitment cycle.
+After successful first-time setup or returning login, the student can access Phase 1 recruitment features.
 
-Do not rely only on a global field such as:
+The app may show:
 
-```text
-User.isPaid
-```
+- Registration confirmation.
+- Payment confirmation.
+- Recruitment timeline.
+- Test details.
+- Available test slots.
+- Current decision state.
+- Relevant instructions and links.
 
-The admin can:
+The backend should return structured state and timeline data.
 
-- Search registrations.
-- Open registration details.
-- Mark payment paid.
-- Mark payment rejected where required.
-- Add a payment reference.
-- Add an internal note.
-- Reverse payment under controlled authorization.
-
-Every payment change should record:
-
-- Actor.
-- Timestamp.
-- Previous state.
-- New state.
-- Verification source.
-- Optional reference.
-- Optional note.
-
-A future payment gateway must call the same payment-verification business service used by the admin panel.
+The app must not independently reconstruct business rules.
 
 ---
 
-## 30. Paid-User Access
+## 15. Recruitment Timeline
 
-Paid-user access is derived from the active recruitment registration.
+Admins control timeline details shown in the app.
 
-For an app-created user:
+Timeline events may include:
 
-```text
-active account
-+
-verified email
-+
-linked registration
-+
-payment status = PAID
-```
+- Registration completed.
+- Payment confirmed.
+- Test-slot booking opened.
+- Test date.
+- Interview date.
+- Final decision date.
+- Custom recruitment notices.
 
-For a web-created user:
+Interviews happen on one common day for all relevant students.
 
-```text
-existing user
-+
-completed password setup
-+
-verified email
-+
-linked registration
-+
-payment status = PAID
-```
+There is no interview-slot booking.
 
-The backend should expose explicit access flags rather than forcing clients to infer them.
+An interview may still appear as a shared timeline event containing:
 
----
+- Date and time.
+- Location.
+- Instructions.
+- Applicant-visible notes.
 
-## 31. Recruitment Timeline
-
-Paid first-year students can view the recruitment timeline.
-
-The timeline may include:
-
-1. Registration submitted.
-2. Payment confirmed.
-3. Test scheduled.
-4. Test completed.
-5. Interview scheduled.
-6. Interview completed.
-7. Final decision.
-8. Domain assignment.
-
-Timeline items may contain:
+Timeline events should support:
 
 - Title.
-- Status.
-- Date and time.
+- Description.
+- Event type.
+- Scheduled date and time.
 - Location.
 - Meeting link.
 - Instructions.
-- Result.
-- Applicant-visible note.
+- Display order.
+- Visibility.
 
-The backend returns timeline items in the correct order.
-
-Clients should not independently recreate recruitment rules.
+Only visible events are returned to first-year students.
 
 ---
 
-## 32. Recruitment Decision
+## 16. Test Slots
 
-Only admins can finalize recruitment decisions.
+Slot booking in Phase 1 is only for tests.
 
-Suggested states:
+The app contains a test-slot booking section where paid first-year students can view the slot options configured by the admin.
+
+Each test-slot option contains:
+
+Date.
+Start time.
+End time.
+Display order.
+Visible or hidden state.
+Seat capacity (configurable by admin).
+
+Admins control which test-slot dates, timings, and seat capacities are shown in the app.
+
+Paid first-year students can:
+
+View the currently visible test-slot options.
+Select one test slot.
+View their selected test slot.
+
+Only one selected test slot is allowed per registration submission for the active recruitment cycle.
+
+At booking time, the backend must:
+
+Confirm that the user is authenticated.
+Confirm that the registration belongs to the user.
+Confirm that the registration is PAID.
+Confirm that the slot belongs to the active recruitment cycle.
+Confirm that the slot is currently visible.
+Confirm that the slot has remaining capacity.
+Confirm that the registration does not already have another selected slot.
+Store the selected test slot and decrement available capacity.
+
+Phase 1 does not include:
+
+Capacity-based waiting lists.
+Slot cancellation workflows.
+Last-seat concurrency handling.
+
+A slot is considered available when it is configured, visible in the app, and has remaining capacity.
+
+---
+
+## 17. Final Recruitment Decision
+
+Only admins may set the final recruitment decision.
+
+Supported values:
 
 ```text
 PENDING
@@ -1052,495 +608,395 @@ WAITLISTED
 REJECTED
 ```
 
-Only paid first-year students may be selected.
+Only `PAID` registrations may receive a decision other than `PENDING`.
 
-Selection must never happen automatically.
+The decision must never be inferred automatically from:
 
-A decision may include:
+- Payment.
+- Test-slot booking.
+- Test attendance.
+- Timeline progress.
+- Interview attendance.
 
-- Decision state.
-- Internal admin note.
-- Applicant-visible note.
-- Decided by.
-- Decision timestamp.
+The admin may add an optional applicant-visible decision note.
 
-Decision changes must be audited.
-
----
-
-## 33. Domain Assignment
-
-Admins assign final domains to selected users.
-
-Example domains include:
-
-- Web.
-- Machine Learning.
-- Internet of Things.
-- AR/VR.
-- Web3.
-- Android.
-
-Domains should be stored in PostgreSQL.
-
-Do not store final assignments as comma-separated strings.
-
-Registration domain interests are preferences only.
-
-Final domain assignments are separate relational records.
-
-Only selected first-year students may receive final domain assignments.
-
-The data model should support multiple domains unless a later product decision restricts assignment to one.
+Domain assignment is excluded from Phase 1.
 
 ---
 
-## 34. Admin Panel Requirements
+## 18. Dynamic Registration Form
 
-The Next.js admin panel uses the same backend as the app and web form.
+There is one form for the active recruitment cycle.
 
-It does not own business logic.
+Admins can manage fields before the form is locked.
 
-### 34.1 Dynamic Forms
+A form field may contain:
+
+- Stable key.
+- Title.
+- Help text.
+- Type.
+- Placeholder.
+- Required state.
+- Display order.
+- Select options.
+- Minimum and maximum length.
+- Minimum and maximum numeric value.
+- Additional validation rules.
+
+Supported types:
+
+```text
+TEXT
+TEXTAREA
+EMAIL
+PHONE
+NUMBER
+DATE
+SELECT
+MULTI_SELECT
+CHECKBOX
+```
+
+The web client renders the form using backend-provided fields.
+
+The backend validates every submission.
+
+Client-side validation is not authoritative.
+
+---
+
+## 19. Form Locking and Historical Submissions
+
+Phase 1 does not implement form versioning.
+
+The form becomes locked after its first registration submission.
+
+Once locked, admins cannot:
+
+- Add fields.
+- Edit field meanings.
+- Reorder fields.
+- Enable or disable fields.
+- Delete fields.
+
+This prevents old and new submissions from using different structures without a versioning system.
+
+Every submitted answer should also snapshot:
+
+- Field key.
+- Field title.
+- Field type.
+
+This preserves readability if minor non-behavioral metadata changes occur before the form is locked.
+
+If live form editing during recruitment is required later, introduce proper form versioning in a future phase.
+
+---
+
+## 20. Admin Panel Requirements
+
+### 20.1 Forms
 
 Admins can:
 
-- Create form drafts.
+- Create the form for a recruitment cycle.
 - Add fields.
 - Edit fields.
 - Reorder fields.
 - Enable or disable fields.
-- Publish versions.
-- View historical versions.
+- View the current field set.
 
-### 34.2 Users and Registrations
+Changes are blocked after the form receives its first submission.
+
+### 20.2 Registrations
 
 Admins can:
 
 - Search by name.
 - Search by email.
-- Filter by account status.
-- Filter by payment state.
+- Search by application number.
+- Filter by payment status.
 - Filter by decision.
-- View profile information.
-- View registration answers.
+- View submitted answers.
+- View the student's selected test slot.
 - View account setup state.
-- View audit history.
 
-### 34.3 Payment
-
-Admins can:
-
-- Mark registrations paid.
-- Reject payment where required.
-- Reverse payment under controlled authorization.
-- Add payment notes.
-- Add references.
-- Correct emails before account setup.
-
-### 34.4 Recruitment
+### 20.3 Payment
 
 Admins can:
 
-- Configure test details.
-- Configure interview details.
-- Update applicant-visible timeline information.
-- Set selected, waitlisted, or rejected decisions.
+- Mark a registration paid.
+- Mark a registration unpaid.
 
-### 34.5 Domain Assignment
+Marking unpaid requires a confirmation dialog in the admin panel.
+
+### 20.4 Timeline
 
 Admins can:
 
-- Assign domains to selected users.
-- Change assignments.
-- Remove assignments when authorized.
-- View assignment history.
+- Create timeline events.
+- Edit timeline events.
+- Reorder timeline events.
+- Show or hide timeline events.
+- Add shared interview-day details.
+- Add test information.
+
+### 20.5 Test Slots
+
+Admins can:
+
+Create test-slot options.
+Set the date of each slot.
+Set the start and end time.
+Configure the seat capacity of each slot.
+Edit slot dates and timings.
+Edit slot capacity.
+Reorder slot options.
+Show or hide slot options in the app.
+View the students who selected each slot.
+View the number of booked and remaining seats for each slot.
+
+A test slot is shown as available to students only when:
+
+It belongs to the active recruitment cycle.
+It is marked visible.
+It has remaining seat capacity.
+
+The admin registration details may show the test slot selected by the student.
+
+Phase 1 does not include:
+
+Slot waiting lists.
+Slot cancellation workflows.
+Automatic reassignment when a slot becomes unavailable.
+
+### 20.6 Decisions
+
+Admins can:
+
+- Set `SELECTED`.
+- Set `WAITLISTED`.
+- Set `REJECTED`.
+- Return a decision to `PENDING` when authorized.
+- Add an optional note.
+
+Domain assignment is not included.
 
 ---
 
-## 35. Coordinator and Admin Provisioning
+## 21. Admin Authorization
 
-Coordinator and admin accounts are outside the first-year flow.
+All admin endpoints must be protected server-side.
 
-They should not:
+The backend must not trust:
 
-- Submit the Join Innogeeks form.
-- Enter the first-year payment flow.
-- Receive first-year recruitment timeline states.
-- Be converted through first-year registration.
+- Hidden buttons.
+- Client-provided roles.
+- Client-provided admin identifiers.
+- Frontend routing.
 
-Their account creation and role assignment should use a separate controlled process.
-
-The exact provisioning method is outside the current phase.
+The authenticated backend identity determines whether the request is authorized.
 
 ---
 
-## 36. Database Ownership Model
+## 22. Email Responsibilities
 
-### 36.1 User
+Phase 1 has two relevant email events.
 
-The user represents platform identity.
+### 22.1 Registration Confirmation Email
 
-Suggested fields include:
-
-- User ID.
-- Email.
-- Password hash, nullable for provisional web users.
-- Email verification status.
-- Account status.
-- Platform role.
-- Created timestamp.
-- Activated timestamp.
-
-### 36.2 Student Profile
-
-The profile contains current reusable student information.
-
-Suggested fields include:
-
-- User ID.
-- Full name.
-- Phone.
-- Batch.
-- Year.
-- Other current profile details.
-
-### 36.3 Registration
-
-The registration represents one recruitment-cycle submission.
-
-Suggested fields include:
-
-- Registration ID.
-- User ID.
-- Recruitment cycle ID.
-- Form version ID.
-- Submitted name.
-- Submitted email.
-- Submitted phone.
-- Dynamic answers.
-- Domain interests.
-- Registration status.
-- Payment status.
-- Recruitment decision.
-- Submission timestamp.
-
-Every registration is linked to a user.
-
-A nullable registration `userId` is not required in the finalized model.
-
-### 36.4 Verification Code
-
-The verification-code record may include:
-
-- User ID.
-- Email.
-- Purpose.
-- Hashed code.
-- Expiry.
-- Attempt count.
-- Resend count.
-- Consumed timestamp.
-- Created timestamp.
-
-### 36.5 Domain Assignment
-
-The domain assignment may include:
-
-- User ID.
-- Domain ID.
-- Assigned by.
-- Assigned timestamp.
-- Optional note.
-
-### 36.6 Audit Record
-
-The audit record may include:
-
-- Actor ID.
-- Action.
-- Target entity.
-- Target ID.
-- Previous state.
-- New state.
-- Timestamp.
-- Optional note.
-
----
-
-## 37. Backend Architecture Requirements
-
-Although the backend uses Express.js, write it in a modular, class-based style similar to NestJS.
-
-Use modules such as:
+Triggered when:
 
 ```text
-auth
-users
-profiles
-forms
-registrations
-payments
-verification-codes
-recruitment
-domains
-admin
-email
-audit
+paymentStatus changes from UNPAID to PAID
 ```
 
-A module may contain:
+Contains:
+
+- Registration confirmation.
+- Payment verification confirmation.
+- App access instructions.
+- App link.
+
+Does not contain a verification code.
+
+### 22.2 First-Login Verification Email
+
+Triggered when:
 
 ```text
-registration/
-  registration.controller.ts
-  registration.service.ts
-  registration.repository.ts
-  registration.routes.ts
-  registration.validation.ts
-  registration.types.ts
+registered + PAID user enters email
+and passwordHash is null
 ```
 
-Controllers should remain thin.
+Contains:
 
-Services own business logic and state transitions.
+- Email verification code.
+- Expiry information.
+- Basic first-login instructions.
 
-Repositories own Prisma queries.
+The email worker only sends the prepared email.
 
-Dependencies should be passed through constructors.
-
-A dependency-injection framework is not required.
-
----
-
-## 38. Security Requirements
-
-The backend must:
-
-- Protect admin endpoints.
-- Enforce role-based authorization.
-- Hash passwords securely.
-- Hash email verification codes.
-- Rate-limit code attempts.
-- Rate-limit code resends.
-- Normalize email addresses.
-- Avoid logging secrets.
-- Validate every request.
-- Prevent duplicate users.
-- Prevent duplicate registrations.
-- Use transactions for sensitive multi-record changes.
-- Audit sensitive admin actions.
+The backend decides eligibility and generates the code.
 
 ---
 
-## 39. Audit Requirements
+## 23. Basic Traceability
 
-Audit at least:
+A full generic audit-log system is optional in Phase 1.
 
-- User creation through web registration.
-- User reuse during web submission.
-- Payment confirmation.
-- Payment rejection.
-- Payment reversal.
-- Registration email correction.
-- Verification-code reissue.
-- Password setup completion.
-- Form publication.
-- Timeline changes.
-- Decision changes.
-- Domain assignment changes.
+Important decision actions should store actor and timestamp fields directly.
 
-Audit records must not contain:
+Payment fields may include:
 
-- Raw passwords.
-- Password hashes.
-- Raw verification codes.
-- Authentication tokens.
+```text
+paymentStatus
+paymentStatusUpdatedAt
+```
 
----
+Decision fields may include:
 
-## 40. Email Worker Requirements
+```text
+decision
+decidedAt
+decidedById
+decisionNote
+```
 
-The email worker receives a prepared payload from the backend.
-
-The payload may contain:
-
-- Recipient email.
-- Subject.
-- Template identifier.
-- Template variables.
-- Delivery metadata.
-
-The worker may:
-
-- Render templates.
-- Call the email provider.
-- Retry transient failures.
-- Log delivery success or failure.
-- Report provider errors.
-
-The worker must not:
-
-- Query users.
-- Query registrations.
-- Access PostgreSQL.
-- Use Prisma.
-- Decide eligibility.
-- Change business state.
+A generic audit system may be added later if more detailed history is required.
 
 ---
 
-## 41. Future Resources
-
-In a later phase, coordinators may publish resources associated with their domain.
-
-All selected first-year users should be able to view published resources regardless of their assigned domain.
-
-Domain association describes resource ownership or categorization, not visibility restriction.
-
----
-
-## 42. Future Sessions and Attendance
-
-A future session flow may be:
-
-1. A coordinator creates a class or session.
-2. The coordinator selects a domain.
-3. Present coordinators are recorded.
-4. Attendance is recorded for selected first-year students of that domain.
-5. Students can view attendance history and summaries.
-
-Multiple coordinators may belong to a domain, but not all coordinators need to attend every session.
-
-These features are outside the current phase.
-
----
-
-## 43. Current Scope
-
-The current phase includes:
-
-- Shared backend and database.
-- First-year web registration.
-- First-year app signup.
-- Email verification.
-- Password setup for web-created users.
-- Dynamic forms.
-- Form versioning.
-- Registration submission.
-- User and registration deduplication.
-- Manual payment verification.
-- Paid-user access.
-- Recruitment timeline.
-- Test and interview information.
-- Final decision.
-- Domain assignment.
-- Admin authorization.
-- Audit logging.
-- Email-worker integration.
+## 24. Product Invariants
+  There are three platform roles: first-year student, coordinator, and admin.
+  The first-year recruitment flow applies only to first-year students.
+  There is no app signup or app registration path in Phase 1.
+  All registrations originate from the public web form.
+  The web form does not require login.
+  The web form, app, and admin panel use the same backend and database.
+  Only one user may exist for a normalized email.
+  Only one registration may exist for a user in a recruitment cycle.
+  Web registration creates or reuses the user immediately.
+  A newly created web user initially has passwordHash = null.
+  Every new registration starts with paymentStatus = UNPAID.
+  Only admins may change a registration’s payment status.
+  There is no payment-gateway integration in Phase 1.
+  Every transition from UNPAID to PAID sends a registration-success email without a verification code.
+  Only registered and paid users may proceed beyond the app email gate.
+  A paid user without a password receives an email verification code during first login.
+  There is no activation code.
+  Successful email verification allows the user to set a password on the existing account.
+  A paid user who already has a password proceeds directly to password login.
+  Payment status is checked before both first-time password setup and returning login.
+  The app provides a test-slot booking section for paid first-year students.
+  Admins control the test-slot dates, timings, display order, visibility, and seat capacities shown in the app.
+  A test slot is available only when it is visible and has remaining seat capacity.
+  A first-year student may select only one test slot for their registration in the active recruitment cycle.
+  A test-slot booking reduces the remaining capacity of the selected slot.
+  A student cannot book a slot whose configured capacity has already been reached.
+  Phase 1 does not include capacity-based waiting lists.
+  Phase 1 does not include slot cancellation workflows.
+  Interviews use a shared date and do not use slot booking.
+  Test-slot selection must not automatically influence the final recruitment decision.
+  Only admins may set the final recruitment decision.
+  Domain assignment is excluded from Phase 1.
+  Resources, coordinator flows, sessions, and attendance are deferred.
+  The email worker must never access the database or own business logic.
 
 ---
 
-## 44. Out of Scope
+## 25. Out of Scope
 
-The current phase does not include:
+Phase 1 does not include:
 
-- Mobile UI implementation details.
+- App signup.
+- App registration.
 - Payment gateway.
-- Resources.
-- Sessions.
+- Domain assignment.
+- Coordinator-domain associations.
+- Resource sharing.
+- Session management.
 - Attendance.
 - Attendance analytics.
-- Push notifications.
 - Coordinator onboarding.
 - Admin onboarding.
-- Real-time WebSocket state updates.
-- File uploads unless explicitly added.
+- Interview-slot booking.
+- Push notifications.
+- Real-time WebSockets.
+- Forgot-password implementation.
+- Generic support-ticket flow.
+- Full generic audit engine.
+- Form versioning.
 
 ---
 
-## 45. Product Invariants
+## 26. Open Decisions
 
-The following must always remain true:
+Do not silently assume:
 
-1. There are three high-level roles: first-year student, coordinator, and admin.
-2. First-year recruitment flows do not apply to coordinators or admins.
-3. The web form does not require login.
-4. The web form, app, and admin panel use the same backend and database.
-5. Web form submission creates or reuses a user.
-6. Web form submission creates the student profile and registration.
-7. Every registration is linked to a user.
-8. A web-created user may initially have no password.
-9. A web-created user cannot use password login until password setup is complete.
-10. Normal app signup requires email verification.
-11. Duplicate users must not be created for the same normalized email.
-12. Duplicate registrations must not be created for the same user and cycle.
-13. App-created registrations do not require another code after payment.
-14. Admin payment confirmation changes paid-user access after the app refreshes state.
-15. One email-code system may support multiple purposes.
-16. Codes must be scoped by purpose.
-17. Paid is a registration state, not a role.
-18. Paid users are not automatically selected.
-19. Only admins finalize selection.
-20. Only selected first-year students receive final domain assignments.
-21. Registration domain interests are not final assignments.
-22. The email worker does not access the database.
-23. The email worker does not own product logic.
-24. Coordinator and admin accounts use separate provisioning.
-25. Clients consume structured state from the backend.
+Verification-code length.
+Verification-code expiry duration.
+Verification-code resend cooldown.
+Maximum invalid verification attempts.
+Password-setup authorization expiry.
+Email provider.
+Transport between the backend and email worker.
+Whether a student may change their selected test slot after booking.
+Whether changing a selected slot should restore capacity to the previous slot.
+Whether admins may edit a test slot after students have selected it.
+Whether admins may hide a test slot after students have selected it.
+What should happen to existing bookings if an admin changes a slot’s date or time.
+Whether an admin may reduce slot capacity below the number of existing bookings.
+Whether hidden slots remain visible to students who already selected them.
+Whether students may edit registration answers after submission.
+Whether rejected or waitlisted decision notes are visible to students.
+Whether a generic audit log is required in a later phase.
 
----
+Until these decisions are finalized:
 
-## 46. Open Product Decisions
-
-Do not silently assume answers for:
-
-- Authentication token strategy.
-- Verification-code length.
-- Verification-code expiry.
-- Resend cooldown.
-- Maximum verification attempts.
-- Email provider.
-- Transport between backend and email worker.
-- Whether web-created users receive the code immediately after payment verification or only when requested in the app.
-- Whether users can edit submitted registrations.
-- Whether selected users receive one domain or multiple domains.
-- Whether test and interview schedules are cycle-wide or student-specific.
-- Whether rejection reasons are visible to students.
-- Whether the ₹50 fee changes by cycle.
-- Whether admins may reverse payment after the account becomes active.
-- Whether file-upload fields are supported.
-
-When implementing these areas, follow the explicit task or keep the design configurable.
+A student should not be allowed to change a selected slot.
+Existing bookings should remain stored if a slot is hidden.
+Admins should not be allowed to reduce capacity below the current booking count.
+Admins should receive a warning before editing a slot that already has bookings.
 
 ---
 
-## 47. Definition of Done
+## 27. Phase 1 Definition of Done
 
-The current phase is complete when:
+Phase 1 is complete when:
 
-1. A first-year student can submit the public web form without logging in.
-2. The backend creates or reuses a user using the normalized email.
-3. The backend creates or updates the student profile.
-4. The backend creates the registration in the shared database.
-5. A newly web-created user is stored without a password and with pending account setup.
-6. An admin can search and inspect users and registrations.
-7. An admin can mark a registration paid.
-8. The backend can send a verification code through the email worker.
-9. A web-created student can verify the code in the app.
-10. The student can create a password for the existing user.
-11. The backend activates the existing user without creating a duplicate.
-12. A web-created user who already has a password can log in normally.
-13. A new student can create an account directly in the app.
-14. The app-signup email can be verified.
-15. The verified app user can submit the Join Innogeeks form.
-16. The app registration is linked to the authenticated user.
-17. An admin can mark the linked app registration paid.
-18. The app can fetch updated state and show paid-user recruitment content.
-19. Admins can manage test and interview details.
-20. Admins can finalize selected, waitlisted, or rejected decisions.
-21. Admins can assign domains to selected users.
-22. Duplicate users and registrations are prevented.
-23. Invalid state transitions are rejected.
-24. Sensitive admin actions are audited.
-25. Coordinator and admin accounts remain outside the first-year flow.
+A first-year student can submit the public web form without logging in.
+The backend creates or reuses a user using the normalized email.
+A newly created web user has no password.
+The backend stores the student’s details and submitted form answers.
+The backend creates an unpaid registration for the active recruitment cycle.
+Duplicate users and registrations are prevented.
+Admins can search and inspect registrations.
+Admins can mark registrations paid or unpaid.
+Every UNPAID to PAID transition sends a registration-success email containing app-access instructions.
+The registration-success email does not contain a verification or activation code.
+The app has no signup or registration path.
+The app checks whether the entered email belongs to a paid registration.
+Unregistered, unpaid, or suspended users are blocked.
+Paid users without a password receive an email verification code during first login.
+The verification code can be securely validated.
+A short-lived password-setup authorization is issued after successful verification.
+The user can set a password on the existing account.
+Paid users with an existing password can log in directly.
+The app can return the recruitment timeline and visible recruitment details.
+Admins can create test-slot options.
+Admins can configure each slot’s date, start time, end time, display order, visibility, and seat capacity.
+Admins can view the number of bookings and remaining seats for each slot.
+Paid first-year students can view test slots that are visible and have remaining capacity.
+A paid first-year student can select one test slot.
+The backend prevents multiple test-slot selections for the same registration.
+The backend prevents a student from selecting a slot whose capacity has been reached.
+Booking a slot stores the student’s selection and reduces the slot’s remaining capacity.
+Students can view their selected test slot in the app.
+Admins can view the students assigned to each test slot.
+Interviews are represented as shared timeline details and do not use slot booking.
+Admins can manage timeline and interview-day information.
+Admins can set selected, waitlisted, or rejected decisions.
+Domain assignment remains unimplemented.
+Attendance, resources, sessions, and coordinator operations remain deferred.

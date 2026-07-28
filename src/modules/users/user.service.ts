@@ -1,7 +1,11 @@
-import { normalizeEmail } from "../common/hash.js";
-import { isPrismaUniqueConstraintError } from "../common/prisma-errors.js";
+import { isPrismaUniqueConstraintError } from "../../common/prisma-errors.js";
+import { normalizeEmail } from "./email.js";
 import type { CreateUserInput, FindOrCreateUserResult, UserRepository } from "./user.types.js";
 
+/**
+ * Temporary identity helper moved from the legacy folder. Module 1 will narrow
+ * public creation inputs and add registration-transaction support.
+ */
 export class UserService {
   constructor(private readonly userRepository: UserRepository) {}
 
