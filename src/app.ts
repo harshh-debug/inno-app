@@ -3,11 +3,20 @@ import type { PrismaClient } from "../generated/prisma/client.js";
 import { HealthController } from "./health/health.controller.js";
 import { createHealthRouter } from "./health/health.routes.js";
 import { HealthService } from "./health/health.service.js";
-import { createApiV1Router } from "./common/http/api-v1.router.js";
+import {
+  createApiV1Router,
+  type AuthenticationRouterDependencies,
+  type RecruitmentCyclesRouterDependencies,
+  type RegistrationsRouterDependencies,
+} from "./common/http/api-v1.router.js";
 import { errorHandler, notFoundHandler } from "./common/http/error.middleware.js";
-import type { AuthController } from "./modules/authentication/auth.controller.js";
 
-export function createApp(prisma: PrismaClient, authentication?: { controller: AuthController }): Express {
+export function createApp(
+  prisma: PrismaClient,
+  authentication?: AuthenticationRouterDependencies,
+  recruitmentCycles?: RecruitmentCyclesRouterDependencies,
+  registrations?: RegistrationsRouterDependencies,
+): Express {
   const app = express();
   const healthService = new HealthService(prisma);
   const healthController = new HealthController(healthService);
@@ -15,7 +24,7 @@ export function createApp(prisma: PrismaClient, authentication?: { controller: A
   app.disable("x-powered-by");
   app.use(express.json({ limit: "1mb" }));
   app.use(createHealthRouter(healthController));
-  app.use("/api/v1", createApiV1Router(authentication));
+  app.use("/api/v1", createApiV1Router(authentication, recruitmentCycles, registrations));
   app.use(notFoundHandler);
   app.use(errorHandler);
 

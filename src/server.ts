@@ -3,12 +3,28 @@ import { loadEnvironment } from "./config/environment.js";
 import { createPrismaClient } from "./database/prisma.js";
 import { createNotificationsModule } from "./modules/notifications/notifications.module.js";
 import { createAuthenticationModule } from "./modules/authentication/authentication.module.js";
+import { createUsersModule } from "./modules/users/users.module.js";
+import { createRecruitmentCyclesModule } from "./modules/recruitment-cycles/recruitment-cycles.module.js";
+import { createRegistrationsModule } from "./modules/registrations/registrations.module.js";
 
 const environment = loadEnvironment();
 const prisma = createPrismaClient(environment);
 const notificationsModule = createNotificationsModule(environment);
+const usersModule = createUsersModule(prisma);
 const authenticationModule = createAuthenticationModule(prisma, notificationsModule.notificationService, environment);
-const app = createApp(prisma, authenticationModule);
+const recruitmentCyclesModule = createRecruitmentCyclesModule(prisma);
+const registrationsModule = createRegistrationsModule(
+  prisma,
+  recruitmentCyclesModule,
+  usersModule,
+  notificationsModule.notificationService,
+);
+
+const app = createApp(prisma, authenticationModule, recruitmentCyclesModule, {
+  formController: registrationsModule.formController,
+  adminRegistrationController: registrationsModule.adminRegistrationController,
+  publicRegistrationController: registrationsModule.publicRegistrationController,
+});
 
 const server = app.listen(environment.PORT, () => {
   console.info(`Backend listening on port ${environment.PORT}`);
