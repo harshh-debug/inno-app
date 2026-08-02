@@ -4,6 +4,10 @@ Express, Prisma, PostgreSQL, and Redis foundation for the Innogeeks Phase 1
 recruitment platform. Product behavior is defined in `.codex/PRD.md`; the
 module-by-module delivery order is in `.codex/IMPLEMENTATION_PLAN.md`.
 
+The implemented Android app integration contract, including request/response
+payloads, authentication flow, and error codes, is documented in
+[`docs/APP_API_CONTRACT.md`](./docs/APP_API_CONTRACT.md).
+
 ## Local setup
 
 1. Review the generated local `.env` and change its development password if desired.
