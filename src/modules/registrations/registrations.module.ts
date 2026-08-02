@@ -1,6 +1,8 @@
 import type { Prisma, PrismaClient } from "../../../generated/prisma/client.js";
 import type { NotificationService } from "../notifications/notification.service.js";
 import type { RecruitmentCyclesModule } from "../recruitment-cycles/recruitment-cycles.module.js";
+import { PrismaRecruitmentCycleRepository } from "../recruitment-cycles/recruitment-cycle.repository.js";
+import { RecruitmentCycleService } from "../recruitment-cycles/recruitment-cycle.service.js";
 import type { createUsersModule } from "../users/users.module.js";
 import { PrismaFormRepository, FormService } from "./form/index.js";
 import { FormController, AdminRegistrationController } from "./admin/index.js";
@@ -21,7 +23,14 @@ export function createRegistrationsModule(
   notificationService: NotificationService,
 ) {
   const formRepository = new PrismaFormRepository(prisma);
-  const formService = new FormService(formRepository, recruitmentCycles.service);
+  const formService = new FormService(
+    formRepository,
+    recruitmentCycles.service,
+    (operation) =>
+      prisma.$transaction((transaction: Prisma.TransactionClient) =>
+        operation(new PrismaFormRepository(transaction)),
+      ),
+  );
   const formController = new FormController(formService);
 
   const registrationRepository = new PrismaRegistrationRepository(prisma);
@@ -34,9 +43,21 @@ export function createRegistrationsModule(
       prisma.$transaction((transaction: Prisma.TransactionClient) => {
         const transactionRegistrationRepository = new PrismaRegistrationRepository(transaction);
         const { userService: transactionUserService } = users.forTransaction(transaction);
+        const transactionRecruitmentCycleRepository = new PrismaRecruitmentCycleRepository(transaction);
+        const transactionRecruitmentCycleService = new RecruitmentCycleService(
+          transactionRecruitmentCycleRepository,
+          (nestedOperation) => nestedOperation(transactionRecruitmentCycleRepository),
+        );
+        const transactionFormService = new FormService(
+          new PrismaFormRepository(transaction),
+          transactionRecruitmentCycleService,
+          (nestedOperation) => nestedOperation(new PrismaFormRepository(transaction)),
+        );
         return operation({
           registrationRepository: transactionRegistrationRepository,
           userService: transactionUserService,
+          recruitmentCycleService: transactionRecruitmentCycleService,
+          formService: transactionFormService,
         });
       }),
   );

@@ -1,8 +1,8 @@
 import type { Response } from "express";
 import type { AuthenticatedRequest } from "../../authentication/auth.middleware.js";
 import type { RegistrationService } from "../registration.service.js";
-import { listRegistrationsQuerySchema } from "../registration.schemas.js";
 import type {
+  ListRegistrationsQuery,
   UpdateDecisionRequest,
   UpdatePaymentStatusRequest,
 } from "../registration.schemas.js";
@@ -13,9 +13,7 @@ export class AdminRegistrationController {
 
   list = async (request: AuthenticatedRequest, response: Response): Promise<void> => {
     const { cycleId } = request.params as { cycleId: string };
-    // Re-parse so coerced numeric/enum values are used: validateRequest only
-    // writes back request.body, not request.query (see registration.schemas.ts note).
-    const query = listRegistrationsQuerySchema.parse(request.query);
+    const query = request.query as unknown as ListRegistrationsQuery;
     const result = await this.registrationService.listForAdmin(cycleId, query);
     response.json({ data: result });
   };

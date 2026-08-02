@@ -1,9 +1,9 @@
-import type {
+import {
   PaymentStatus,
-  Prisma,
-  PrismaClient,
-  RecruitmentDecision,
-  RegistrationSubmission,
+  type Prisma,
+  type PrismaClient,
+  type RecruitmentDecision,
+  type RegistrationSubmission,
 } from "../../../generated/prisma/client.js";
 import type {
   CreateFormInputSubmissionRow,
@@ -96,6 +96,22 @@ export class PrismaRegistrationRepository implements RegistrationRepository {
     });
   };
 
+  async transitionPaymentStatus(
+    id: string,
+    from: PaymentStatus,
+    to: PaymentStatus,
+    updatedAt: Date,
+  ): Promise<RegistrationSubmission | null> {
+    const changed = await this.prisma.registrationSubmission.updateMany({
+      where: { id, paymentStatus: from },
+      data: { paymentStatus: to, paymentStatusUpdatedAt: updatedAt },
+    });
+    if (changed.count !== 1) {
+      return null;
+    }
+    return this.prisma.registrationSubmission.findUnique({ where: { id } });
+  }
+
   updateDecision = (
     id: string,
     input: {
@@ -107,4 +123,23 @@ export class PrismaRegistrationRepository implements RegistrationRepository {
   ): Promise<RegistrationSubmission> => {
     return this.prisma.registrationSubmission.update({ where: { id }, data: input });
   };
+
+  async updateFinalDecisionForPaid(
+    id: string,
+    input: {
+      decision: RecruitmentDecision;
+      decisionNote: string | null;
+      decidedAt: Date;
+      decidedById: string;
+    },
+  ): Promise<RegistrationSubmission | null> {
+    const changed = await this.prisma.registrationSubmission.updateMany({
+      where: { id, paymentStatus: PaymentStatus.PAID },
+      data: input,
+    });
+    if (changed.count !== 1) {
+      return null;
+    }
+    return this.prisma.registrationSubmission.findUnique({ where: { id } });
+  }
 }

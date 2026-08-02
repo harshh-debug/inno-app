@@ -26,17 +26,22 @@ function splitOptions(enumValue: string | null): string[] {
   return enumValue.split(",").map((option) => option.trim()).filter((option) => option.length > 0);
 }
 
-function toStringList(rawValue: unknown): string[] {
-  if (Array.isArray(rawValue)) {
-    return rawValue.map((item) => String(item).trim()).filter((item) => item.length > 0);
+function requireString(field: FieldValidationRules, rawValue: unknown): string {
+  if (typeof rawValue !== "string") {
+    throw fieldError(field, "Must be a string");
   }
-  if (typeof rawValue === "string") {
-    return rawValue
-      .split(",")
-      .map((item) => item.trim())
-      .filter((item) => item.length > 0);
+  return rawValue.trim();
+}
+
+function requireStringList(field: FieldValidationRules, rawValue: unknown): string[] {
+  if (!Array.isArray(rawValue) || rawValue.some((value) => typeof value !== "string")) {
+    throw fieldError(field, "Must be an array of strings");
   }
-  return [];
+  const values = rawValue.map((value) => value.trim()).filter(Boolean);
+  if (new Set(values).size !== values.length) {
+    throw fieldError(field, "Must not contain duplicate options");
+  }
+  return values;
 }
 
 function isBlank(rawValue: unknown): boolean {
@@ -74,12 +79,12 @@ export function validateAndNormalizeAnswer(
   switch (field.type) {
     case InputType.TEXT:
     case InputType.TEXTAREA: {
-      const value = String(rawValue).trim();
+      const value = requireString(field, rawValue);
       checkLength(field, value);
       return value;
     }
     case InputType.EMAIL: {
-      const value = String(rawValue).trim();
+      const value = requireString(field, rawValue);
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
         throw fieldError(field, "Must be a valid email address");
       }
@@ -87,13 +92,16 @@ export function validateAndNormalizeAnswer(
       return value;
     }
     case InputType.PHONE: {
-      const value = String(rawValue).trim();
+      const value = requireString(field, rawValue);
       checkLength(field, value);
       return value;
     }
     case InputType.NUMBER: {
+      if (typeof rawValue !== "number" && typeof rawValue !== "string") {
+        throw fieldError(field, "Must be a number");
+      }
       const numeric = Number(rawValue);
-      if (Number.isNaN(numeric)) {
+      if (!Number.isFinite(numeric)) {
         throw fieldError(field, "Must be a number");
       }
       if (field.minValue !== null && numeric < field.minValue) {
@@ -105,15 +113,24 @@ export function validateAndNormalizeAnswer(
       return String(numeric);
     }
     case InputType.DATE: {
-      const value = String(rawValue).trim();
-      const parsed = new Date(value);
-      if (Number.isNaN(parsed.getTime())) {
+      const value = requireString(field, rawValue);
+      const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+      if (match === null) {
+        throw fieldError(field, "Must be a valid YYYY-MM-DD date");
+      }
+      const parsed = new Date(`${value}T00:00:00.000Z`);
+      if (
+        Number.isNaN(parsed.getTime()) ||
+        parsed.getUTCFullYear() !== Number(match[1]) ||
+        parsed.getUTCMonth() + 1 !== Number(match[2]) ||
+        parsed.getUTCDate() !== Number(match[3])
+      ) {
         throw fieldError(field, "Must be a valid date");
       }
       return value;
     }
     case InputType.SELECT: {
-      const value = String(rawValue).trim();
+      const value = requireString(field, rawValue);
       const options = splitOptions(field.enum);
       if (!options.includes(value)) {
         throw fieldError(field, "Must be one of the available options");
@@ -122,7 +139,7 @@ export function validateAndNormalizeAnswer(
     }
     case InputType.MULTI_SELECT:
     case InputType.CHECKBOX: {
-      const values = toStringList(rawValue);
+      const values = requireStringList(field, rawValue);
       const options = splitOptions(field.enum);
       for (const value of values) {
         if (!options.includes(value)) {

@@ -16,10 +16,18 @@ const OPTION_BASED_TYPES = new Set<InputType>([
   InputType.MULTI_SELECT,
   InputType.CHECKBOX,
 ]);
+const LENGTH_BASED_TYPES = new Set<InputType>([
+  InputType.TEXT,
+  InputType.TEXTAREA,
+  InputType.EMAIL,
+  InputType.PHONE,
+]);
 
 export type FieldDeletionResult =
   | { deletionType: "HARD_DELETE" }
   | { deletionType: "SOFT_DELETE"; field: FormField };
+
+type FormTransaction = <T>(operation: (repository: FormRepository) => Promise<T>) => Promise<T>;
 
 /**
  * Owns dynamic-form and field lifecycle rules (PRD §18–20.1). Fields stay
@@ -29,6 +37,7 @@ export class FormService {
   constructor(
     private readonly formRepository: FormRepository,
     private readonly recruitmentCycleService: RecruitmentCycleService,
+    private readonly transaction: FormTransaction,
   ) {}
 
   async createForCycle(cycleId: string, input: CreateFormInput): Promise<Form> {
@@ -65,7 +74,6 @@ export class FormService {
   }
 
   async addField(formId: string, input: CreateFormFieldInput): Promise<FormField> {
-    await this.getByIdOrThrow(formId);
     this.assertFieldRulesConsistent({
       type: input.type,
       enum: input.enum ?? null,
@@ -75,11 +83,16 @@ export class FormService {
       maxValue: input.maxValue ?? null,
     });
 
-    const existingFields = await this.formRepository.findFieldsByFormId(formId);
-    const nextOrder = existingFields.reduce((max, field) => Math.max(max, field.order), -1) + 1;
-
     try {
-      return await this.formRepository.createField(formId, nextOrder, input);
+      return await this.transaction(async (repository) => {
+        const form = await repository.findById(formId);
+        if (form === null) {
+          throw new AppError("FORM_NOT_FOUND", 404, "Form not found");
+        }
+        const existingFields = await repository.findFieldsByFormId(formId);
+        const nextOrder = existingFields.reduce((max, field) => Math.max(max, field.order), -1) + 1;
+        return repository.createField(formId, nextOrder, input);
+      });
     } catch (error) {
       if (isPrismaUniqueConstraintError(error)) {
         throw new AppError(
@@ -92,9 +105,9 @@ export class FormService {
     }
   }
 
-  async updateField(fieldId: string, input: UpdateFormFieldInput): Promise<FormField> {
+  async updateField(formId: string, fieldId: string, input: UpdateFormFieldInput): Promise<FormField> {
     const existing = await this.formRepository.findFieldById(fieldId);
-    if (existing === null) {
+    if (existing === null || existing.formId !== formId) {
       throw new AppError("FORM_FIELD_NOT_FOUND", 404, "Form field not found");
     }
 
@@ -125,21 +138,22 @@ export class FormService {
    * Field removal is field-specific (PRD §19): a field with no submitted
    * answers is deleted permanently; a field with answers is archived.
    */
-  async removeField(fieldId: string): Promise<FieldDeletionResult> {
-    const existing = await this.formRepository.findFieldById(fieldId);
-    if (existing === null) {
-      throw new AppError("FORM_FIELD_NOT_FOUND", 404, "Form field not found");
-    }
+  async removeField(formId: string, fieldId: string): Promise<FieldDeletionResult> {
+    return this.transaction(async (repository) => {
+      const existing = await repository.findFieldById(fieldId);
+      if (existing === null || existing.formId !== formId) {
+        throw new AppError("FORM_FIELD_NOT_FOUND", 404, "Form field not found");
+      }
 
-    const submissionCount = await this.formRepository.countSubmissionsForField(fieldId);
+      const submissionCount = await repository.countSubmissionsForField(fieldId);
+      if (submissionCount === 0) {
+        await repository.deleteField(fieldId);
+        return { deletionType: "HARD_DELETE" };
+      }
 
-    if (submissionCount === 0) {
-      await this.formRepository.deleteField(fieldId);
-      return { deletionType: "HARD_DELETE" };
-    }
-
-    const field = await this.formRepository.updateField(fieldId, { isActive: false });
-    return { deletionType: "SOFT_DELETE", field };
+      const field = await repository.updateField(fieldId, { isActive: false });
+      return { deletionType: "SOFT_DELETE", field };
+    });
   }
 
   /**
@@ -150,31 +164,35 @@ export class FormService {
    * transient unique-constraint collisions.
    */
   async reorderFields(formId: string, orderedFieldIds: string[]): Promise<FormField[]> {
-    await this.getByIdOrThrow(formId);
+    return this.transaction(async (repository) => {
+      const form = await repository.findById(formId);
+      if (form === null) {
+        throw new AppError("FORM_NOT_FOUND", 404, "Form not found");
+      }
+      const existingFields = await repository.findFieldsByFormId(formId);
+      const requestedIds = new Set(orderedFieldIds);
 
-    const existingFields = await this.formRepository.findFieldsByFormId(formId);
-    const requestedIds = new Set(orderedFieldIds);
+      if (
+        orderedFieldIds.length !== existingFields.length ||
+        requestedIds.size !== orderedFieldIds.length ||
+        existingFields.some((field) => !requestedIds.has(field.id))
+      ) {
+        throw new AppError(
+          "INVALID_FIELD_ORDER",
+          400,
+          "The reorder request must include every existing field on this form exactly once",
+        );
+      }
 
-    if (
-      orderedFieldIds.length !== existingFields.length ||
-      requestedIds.size !== orderedFieldIds.length ||
-      existingFields.some((field) => !requestedIds.has(field.id))
-    ) {
-      throw new AppError(
-        "INVALID_FIELD_ORDER",
-        400,
-        "The reorder request must include every existing field on this form exactly once",
-      );
-    }
+      for (const [index, fieldId] of orderedFieldIds.entries()) {
+        await repository.setFieldOrder(fieldId, -(index + 1));
+      }
+      for (const [index, fieldId] of orderedFieldIds.entries()) {
+        await repository.setFieldOrder(fieldId, index);
+      }
 
-    for (const [index, fieldId] of orderedFieldIds.entries()) {
-      await this.formRepository.setFieldOrder(fieldId, -(index + 1));
-    }
-    for (const [index, fieldId] of orderedFieldIds.entries()) {
-      await this.formRepository.setFieldOrder(fieldId, index);
-    }
-
-    return this.formRepository.findFieldsByFormId(formId);
+      return repository.findFieldsByFormId(formId);
+    });
   }
 
   /** Used by public registration and by the form itself; never exposes cycle IDs. */
@@ -209,6 +227,18 @@ export class FormService {
           "SELECT, MULTI_SELECT, and CHECKBOX fields require at least one comma-separated option",
         );
       }
+      if (new Set(options).size !== options.length) {
+        throw new AppError("INVALID_FIELD_VALIDATION", 400, "Field options must be unique");
+      }
+    } else if (rules.enum !== null) {
+      throw new AppError("INVALID_FIELD_VALIDATION", 400, "Only option-based fields may define options");
+    }
+
+    if (!LENGTH_BASED_TYPES.has(rules.type) && (rules.minLength !== null || rules.maxLength !== null)) {
+      throw new AppError("INVALID_FIELD_VALIDATION", 400, "Length limits apply only to text-based fields");
+    }
+    if (rules.type !== InputType.NUMBER && (rules.minValue !== null || rules.maxValue !== null)) {
+      throw new AppError("INVALID_FIELD_VALIDATION", 400, "Numeric limits apply only to NUMBER fields");
     }
 
     if (

@@ -4,10 +4,12 @@ import {
   type FormField,
   type InputType,
   type RegistrationSubmission,
+  type User,
 } from "../../../generated/prisma/client.js";
 import { AppError } from "../../common/errors.js";
 import { isPrismaUniqueConstraintError } from "../../common/prisma-errors.js";
 import type { UserService } from "../users/user.service.js";
+import { deriveAccountState } from "../users/account-state.js";
 import type { NotificationService } from "../notifications/notification.service.js";
 import type { RecruitmentCycleService } from "../recruitment-cycles/recruitment-cycle.service.js";
 import { validateAndNormalizeAnswer } from "./form/answer-validation.js";
@@ -15,7 +17,6 @@ import type { FormService } from "./form/form.service.js";
 import type {
   RegistrationDetail,
   RegistrationRepository,
-  RegistrationSearchResult,
   SubmitRegistrationInput,
 } from "./registration.types.js";
 
@@ -30,8 +31,23 @@ export interface PaymentStatusUpdateResult {
   emailQueued: boolean;
 }
 
+interface AdminApplicantView {
+  id: string;
+  collegeEmail: string;
+  personalEmail: string | null;
+  fullName: string | null;
+  phone: string | null;
+  batch: string | null;
+  year: number | null;
+  isSuspended: boolean;
+  accountState: ReturnType<typeof deriveAccountState>;
+}
+
 export interface RegistrationDetailView {
-  registration: Omit<RegistrationDetail, "formInputs">;
+  registration: Omit<RegistrationDetail, "formInputs" | "user" | "decidedBy" | "testSlotBooking" | "userId" | "recruitmentCycleId" | "formId" | "decidedById">;
+  applicant: AdminApplicantView;
+  decisionActor: { id: string; fullName: string | null; collegeEmail: string } | null;
+  selectedTestSlot: RegistrationDetail["testSlotBooking"];
   answers: Array<{ fieldId: string; fieldKey: string; fieldTitle: string; fieldType: InputType; value: string }>;
   currentFormAnswers: Array<{
     fieldId: string;
@@ -45,6 +61,8 @@ export interface RegistrationDetailView {
 interface TransactionContext {
   registrationRepository: RegistrationRepository;
   userService: UserService;
+  recruitmentCycleService: RecruitmentCycleService;
+  formService: FormService;
 }
 
 /**
@@ -62,58 +80,62 @@ export class RegistrationService {
   ) {}
 
   async submitPublicRegistration(input: SubmitRegistrationInput): Promise<SubmitRegistrationResult> {
-    const cycle = await this.recruitmentCycleService.getActiveCycleOrThrow();
-    const { form, fields } = await this.formService.getActiveFieldsForCycle(cycle.id);
-
-    const fieldsById = new Map<string, FormField>(fields.map((field) => [field.id, field]));
-    const seenFieldIds = new Set<string>();
-    const rows: Array<{
-      fieldId: string;
-      fieldKey: string;
-      fieldTitle: string;
-      fieldType: InputType;
-      value: string;
-    }> = [];
-
-    for (const answer of input.answers) {
-      if (seenFieldIds.has(answer.fieldId)) {
-        throw new AppError(
-          "DUPLICATE_FORM_ANSWER",
-          400,
-          `More than one answer was submitted for the same field (${answer.fieldId})`,
-        );
-      }
-      seenFieldIds.add(answer.fieldId);
-
-      const field = fieldsById.get(answer.fieldId);
-      if (field === undefined) {
-        throw new AppError(
-          "UNKNOWN_FORM_FIELD",
-          400,
-          `Field ${answer.fieldId} is not part of the active registration form`,
-        );
-      }
-
-      const normalizedValue = validateAndNormalizeAnswer(field, answer.value);
-      if (normalizedValue !== undefined) {
-        rows.push({
-          fieldId: field.id,
-          fieldKey: field.key,
-          fieldTitle: field.title,
-          fieldType: field.type,
-          value: normalizedValue,
-        });
-      }
-    }
-
-    for (const field of fields) {
-      if (field.required && !seenFieldIds.has(field.id)) {
-        throw new AppError("VALIDATION_ERROR", 400, `${field.title} is required`);
-      }
-    }
-
     try {
-      return await this.transaction(async ({ registrationRepository, userService }) => {
+      return await this.transaction(async ({
+        registrationRepository,
+        userService,
+        recruitmentCycleService,
+        formService,
+      }) => {
+        const cycle = await recruitmentCycleService.getActiveCycleOrThrow();
+        const { form, fields } = await formService.getActiveFieldsForCycle(cycle.id);
+        const fieldsById = new Map<string, FormField>(fields.map((field) => [field.id, field]));
+        const seenFieldIds = new Set<string>();
+        const rows: Array<{
+          fieldId: string;
+          fieldKey: string;
+          fieldTitle: string;
+          fieldType: InputType;
+          value: string;
+        }> = [];
+
+        for (const answer of input.answers) {
+          if (seenFieldIds.has(answer.fieldId)) {
+            throw new AppError(
+              "DUPLICATE_FORM_ANSWER",
+              400,
+              `More than one answer was submitted for the same field (${answer.fieldId})`,
+            );
+          }
+          seenFieldIds.add(answer.fieldId);
+
+          const field = fieldsById.get(answer.fieldId);
+          if (field === undefined) {
+            throw new AppError(
+              "UNKNOWN_FORM_FIELD",
+              400,
+              `Field ${answer.fieldId} is not part of the active registration form`,
+            );
+          }
+
+          const normalizedValue = validateAndNormalizeAnswer(field, answer.value);
+          if (normalizedValue !== undefined) {
+            rows.push({
+              fieldId: field.id,
+              fieldKey: field.key,
+              fieldTitle: field.title,
+              fieldType: field.type,
+              value: normalizedValue,
+            });
+          }
+        }
+
+        for (const field of fields) {
+          if (field.required && !seenFieldIds.has(field.id)) {
+            throw new AppError("VALIDATION_ERROR", 400, `${field.title} is required`);
+          }
+        }
+
         const { user } = await userService.findOrCreateProvisionalStudent(input.studentDetails);
 
         const existingRegistration = await registrationRepository.findByUserAndCycle(user.id, cycle.id);
@@ -156,9 +178,23 @@ export class RegistrationService {
       page: number;
       pageSize: number;
     },
-  ): Promise<RegistrationSearchResult> {
+  ) {
     await this.recruitmentCycleService.getById(recruitmentCycleId);
-    return this.registrationRepository.search({ recruitmentCycleId, ...filters });
+    const result = await this.registrationRepository.search({ recruitmentCycleId, ...filters });
+    return {
+      ...result,
+      items: result.items.map((item) => ({
+        id: item.id,
+        applicationNumber: item.applicationNumber,
+        paymentStatus: item.paymentStatus,
+        paymentStatusUpdatedAt: item.paymentStatusUpdatedAt,
+        decision: item.decision,
+        decisionNote: item.decisionNote,
+        submittedAt: item.submittedAt,
+        updatedAt: item.updatedAt,
+        applicant: this.toApplicantView(item.user),
+      })),
+    };
   }
 
   async getDetailForAdmin(registrationId: string): Promise<RegistrationDetailView> {
@@ -195,9 +231,29 @@ export class RegistrationService {
       };
     });
 
-    const { formInputs: _formInputs, ...registrationWithoutInputs } = registration;
+    const {
+      formInputs: _formInputs,
+      user,
+      decidedBy,
+      testSlotBooking,
+      userId: _userId,
+      recruitmentCycleId: _recruitmentCycleId,
+      formId: _formId,
+      decidedById: _decidedById,
+      ...registrationWithoutInternals
+    } = registration;
 
-    return { registration: registrationWithoutInputs, answers, currentFormAnswers };
+    return {
+      registration: registrationWithoutInternals,
+      applicant: this.toApplicantView(user),
+      decisionActor:
+        decidedBy === null
+          ? null
+          : { id: decidedBy.id, fullName: decidedBy.fullName, collegeEmail: decidedBy.collegeEmail },
+      selectedTestSlot: testSlotBooking,
+      answers,
+      currentFormAnswers,
+    };
   }
 
   /**
@@ -217,11 +273,17 @@ export class RegistrationService {
       return { registration, emailQueued: false };
     }
 
-    const updated = await this.registrationRepository.updatePaymentStatus(
+    const updated = await this.registrationRepository.transitionPaymentStatus(
       registrationId,
+      registration.paymentStatus,
       requestedStatus,
       new Date(),
     );
+
+    if (updated === null) {
+      const current = await this.findByIdOrThrow(registrationId);
+      return { registration: current, emailQueued: false };
+    }
 
     if (requestedStatus !== PaymentStatus.PAID) {
       return { registration: updated, emailQueued: false };
@@ -243,7 +305,16 @@ export class RegistrationService {
   ) {
     const registration = await this.findByIdOrThrow(registrationId);
 
-    if (input.decision !== RecruitmentDecision.PENDING && registration.paymentStatus !== PaymentStatus.PAID) {
+    if (input.decision === RecruitmentDecision.PENDING) {
+      return this.registrationRepository.updateDecision(registrationId, {
+        decision: RecruitmentDecision.PENDING,
+        decisionNote: null,
+        decidedAt: null,
+        decidedById: null,
+      });
+    }
+
+    if (registration.paymentStatus !== PaymentStatus.PAID) {
       throw new AppError(
         "DECISION_REQUIRES_PAID_REGISTRATION",
         409,
@@ -251,14 +322,20 @@ export class RegistrationService {
       );
     }
 
-    const isReturningToPending = input.decision === RecruitmentDecision.PENDING;
-
-    return this.registrationRepository.updateDecision(registrationId, {
+    const updated = await this.registrationRepository.updateFinalDecisionForPaid(registrationId, {
       decision: input.decision,
       decisionNote: input.decisionNote ?? null,
-      decidedAt: isReturningToPending ? null : new Date(),
-      decidedById: isReturningToPending ? null : actorId,
+      decidedAt: new Date(),
+      decidedById: actorId,
     });
+    if (updated === null) {
+      throw new AppError(
+        "DECISION_REQUIRES_PAID_REGISTRATION",
+        409,
+        "Only paid registrations may receive a final decision",
+      );
+    }
+    return updated;
   }
 
   private async findByIdOrThrow(registrationId: string): Promise<RegistrationDetail> {
@@ -275,5 +352,19 @@ export class RegistrationService {
       409,
       "This email has already registered for the active recruitment cycle",
     );
+  }
+
+  private toApplicantView(user: User): AdminApplicantView {
+    return {
+      id: user.id,
+      collegeEmail: user.collegeEmail,
+      personalEmail: user.personalEmail,
+      fullName: user.fullName,
+      phone: user.phone,
+      batch: user.batch,
+      year: user.year,
+      isSuspended: user.isSuspended,
+      accountState: deriveAccountState(user),
+    };
   }
 }

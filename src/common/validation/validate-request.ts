@@ -24,6 +24,12 @@ export function validateRequest(schema: z.ZodType<RequestValidationInput>): Requ
     if (parsed.data.body !== undefined) {
       request.body = parsed.data.body;
     }
+    if (parsed.data.params !== undefined) {
+      request.params = parsed.data.params as typeof request.params;
+    }
+    if (parsed.data.query !== undefined) {
+      request.query = parsed.data.query as typeof request.query;
+    }
 
     next();
   };

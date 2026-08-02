@@ -68,6 +68,12 @@ export interface RegistrationRepository {
   findById(id: string): Promise<RegistrationDetail | null>;
   search(filters: RegistrationSearchFilters): Promise<RegistrationSearchResult>;
   updatePaymentStatus(id: string, status: PaymentStatus, updatedAt: Date): Promise<RegistrationSubmission>;
+  transitionPaymentStatus(
+    id: string,
+    from: PaymentStatus,
+    to: PaymentStatus,
+    updatedAt: Date,
+  ): Promise<RegistrationSubmission | null>;
   updateDecision(
     id: string,
     input: {
@@ -77,4 +83,13 @@ export interface RegistrationRepository {
       decidedById: string | null;
     },
   ): Promise<RegistrationSubmission>;
+  updateFinalDecisionForPaid(
+    id: string,
+    input: {
+      decision: RecruitmentDecision;
+      decisionNote: string | null;
+      decidedAt: Date;
+      decidedById: string;
+    },
+  ): Promise<RegistrationSubmission | null>;
 }

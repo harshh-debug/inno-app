@@ -17,7 +17,7 @@ export const submitRegistrationSchema = z.object({
       year: z.number().int().nullable().optional(),
     }),
     answers: z
-      .array(z.object({ fieldId: z.uuid(), value: answerValue.optional() }))
+      .array(z.object({ fieldId: z.uuid(), value: answerValue }))
       .default([]),
   }),
 });

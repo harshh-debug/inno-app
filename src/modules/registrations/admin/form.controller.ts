@@ -39,15 +39,15 @@ export class FormController {
   };
 
   updateField = async (request: Request, response: Response): Promise<void> => {
-    const { fieldId } = request.params as { fieldId: string };
+    const { formId, fieldId } = request.params as { formId: string; fieldId: string };
     const body = request.body as UpdateFieldRequest;
-    const field = await this.formService.updateField(fieldId, body);
+    const field = await this.formService.updateField(formId, fieldId, body);
     response.json({ data: field });
   };
 
   removeField = async (request: Request, response: Response): Promise<void> => {
-    const { fieldId } = request.params as { fieldId: string };
-    const result = await this.formService.removeField(fieldId);
+    const { formId, fieldId } = request.params as { formId: string; fieldId: string };
+    const result = await this.formService.removeField(formId, fieldId);
     response.json({ data: result });
   };
 
