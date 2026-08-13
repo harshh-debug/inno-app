@@ -5,21 +5,24 @@ import { AuthController } from "./auth.controller.js";
 import { AuthRepository } from "./auth.repository.js";
 import { AuthService } from "./auth.service.js";
 import { AccessTokenService } from "./token.js";
+import { TokenDenylist } from "./token-denylist.js";
 
 export function createAuthenticationModule(
   prisma: PrismaClient,
   notifications: NotificationService,
-  environment: Pick<Environment, "JWT_SECRET" | "VERIFICATION_HASH_SECRET">,
+  environment: Pick<Environment, "JWT_SECRET" | "VERIFICATION_HASH_SECRET" | "REDIS_URL">,
 ) {
   const repository = new AuthRepository(prisma);
   const tokens = new AccessTokenService(environment.JWT_SECRET);
+  const denylist = new TokenDenylist(environment.REDIS_URL);
   const service = new AuthService(
     repository,
     notifications,
     tokens,
     environment.VERIFICATION_HASH_SECRET,
     (operation) => prisma.$transaction((transaction) => operation(new AuthRepository(transaction))),
+    denylist,
   );
   const controller = new AuthController(service);
-  return { repository, tokens, service, controller };
+  return { repository, tokens, denylist, service, controller };
 }

@@ -1,8 +1,10 @@
 import type { Environment } from "../../config/environment.js";
 import {
   buildEmailVerificationEmail,
+  buildPasswordResetEmail,
   buildRegistrationSuccessEmail,
   type EmailVerificationEmailInput,
+  type PasswordResetEmailInput,
   type RegistrationSuccessEmailInput,
 } from "./email-payload.js";
 import { EmailQueue } from "./email-queue.js";
@@ -22,5 +24,10 @@ export class NotificationService {
   async queueEmailVerification(input: EmailVerificationEmailInput): Promise<void> {
     const payload = buildEmailVerificationEmail(input);
     await this.emailQueue.enqueue("EMAIL_VERIFICATION", payload);
+  }
+
+  async queuePasswordReset(input: PasswordResetEmailInput): Promise<void> {
+    const payload = buildPasswordResetEmail(input);
+    await this.emailQueue.enqueue("PASSWORD_RESET", payload);
   }
 }

@@ -1,20 +1,28 @@
 import { Router } from "express";
 import type { AuthController } from "../../modules/authentication/auth.controller.js";
 import { createAdminAuthRouter, createAppAuthRouter } from "../../modules/authentication/auth.routes.js";
-import { authenticateAccessToken, requireAdmin } from "../../modules/authentication/auth.middleware.js";
+import {
+  authenticateAccessToken,
+  requireAdmin,
+  requireAppStudent,
+} from "../../modules/authentication/auth.middleware.js";
 import type { AuthService } from "../../modules/authentication/auth.service.js";
 import type { AccessTokenService } from "../../modules/authentication/token.js";
+import type { TokenDenylist } from "../../modules/authentication/token-denylist.js";
 import type { RecruitmentCycleController } from "../../modules/recruitment-cycles/recruitment-cycle.controller.js";
 import { createAdminRecruitmentCycleRouter } from "../../modules/recruitment-cycles/recruitment-cycle.routes.js";
 import type { FormController, AdminRegistrationController } from "../../modules/registrations/admin/index.js";
 import { createAdminFormRouter, createAdminRegistrationRouter } from "../../modules/registrations/admin/index.js";
 import type { PublicRegistrationController } from "../../modules/registrations/public/index.js";
 import { createPublicRegistrationRouter } from "../../modules/registrations/public/index.js";
+import type { AppProfileController } from "../../modules/app-profile/app-profile.controller.js";
+import { createAppProfileRouter } from "../../modules/app-profile/app-profile.routes.js";
 
 export interface AuthenticationRouterDependencies {
   controller: AuthController;
   tokens: AccessTokenService;
   service: AuthService;
+  denylist: TokenDenylist;
 }
 
 export interface RecruitmentCyclesRouterDependencies {
@@ -27,6 +35,10 @@ export interface RegistrationsRouterDependencies {
   publicRegistrationController: PublicRegistrationController;
 }
 
+export interface AppProfileRouterDependencies {
+  controller: AppProfileController;
+}
+
 /**
  * Stable client namespaces. Feature routers are mounted here as their modules
  * are implemented. Admin-only routers require `authentication` to be
@@ -37,6 +49,7 @@ export function createApiV1Router(
   authentication?: AuthenticationRouterDependencies,
   recruitmentCycles?: RecruitmentCyclesRouterDependencies,
   registrations?: RegistrationsRouterDependencies,
+  appProfile?: AppProfileRouterDependencies,
 ): Router {
   const router = Router();
 
@@ -50,13 +63,19 @@ export function createApiV1Router(
   const appRouter = Router();
 
   if (authentication !== undefined) {
-    adminRouter.use("/auth", createAdminAuthRouter(authentication.controller));
-    appRouter.use("/auth", createAppAuthRouter(authentication.controller));
+    // Verifies the bearer token and checks it hasn't been logged out. Used
+    // wherever we only need to know *who* the caller is (e.g. logout itself).
+    const bearerGuard = authenticateAccessToken(authentication.tokens, authentication.denylist);
 
-    const adminGuard = [
-      authenticateAccessToken(authentication.tokens),
-      requireAdmin(authentication.service),
-    ];
+    adminRouter.use("/auth", createAdminAuthRouter(authentication.controller));
+    appRouter.use("/auth", createAppAuthRouter(authentication.controller, bearerGuard));
+
+    const adminGuard = [bearerGuard, requireAdmin(authentication.service)];
+
+    // Rechecks paid/eligible status on every call, not just at login — see
+    // gap 4. Everything under /app other than /auth needs this, not just
+    // the bearer check.
+    const appStudentGuard = [bearerGuard, requireAppStudent(authentication.service)];
 
     if (recruitmentCycles !== undefined) {
       adminRouter.use(
@@ -70,6 +89,10 @@ export function createApiV1Router(
       adminRouter.use(
         createAdminRegistrationRouter(registrations.adminRegistrationController, adminGuard),
       );
+    }
+
+    if (appProfile !== undefined) {
+      appRouter.use(createAppProfileRouter(appProfile.controller, appStudentGuard));
     }
   }
 

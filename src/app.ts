@@ -5,6 +5,7 @@ import { createHealthRouter } from "./health/health.routes.js";
 import { HealthService } from "./health/health.service.js";
 import {
   createApiV1Router,
+  type AppProfileRouterDependencies,
   type AuthenticationRouterDependencies,
   type RecruitmentCyclesRouterDependencies,
   type RegistrationsRouterDependencies,
@@ -16,6 +17,7 @@ export function createApp(
   authentication?: AuthenticationRouterDependencies,
   recruitmentCycles?: RecruitmentCyclesRouterDependencies,
   registrations?: RegistrationsRouterDependencies,
+  appProfile?: AppProfileRouterDependencies,
 ): Express {
   const app = express();
   const healthService = new HealthService(prisma);
@@ -24,7 +26,7 @@ export function createApp(
   app.disable("x-powered-by");
   app.use(express.json({ limit: "1mb" }));
   app.use(createHealthRouter(healthController));
-  app.use("/api/v1", createApiV1Router(authentication, recruitmentCycles, registrations));
+  app.use("/api/v1", createApiV1Router(authentication, recruitmentCycles, registrations, appProfile));
   app.use(notFoundHandler);
   app.use(errorHandler);
 

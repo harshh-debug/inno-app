@@ -1,4 +1,4 @@
-export const EMAIL_JOB_TYPES = ["REGISTRATION_SUCCESS", "EMAIL_VERIFICATION"] as const;
+export const EMAIL_JOB_TYPES = ["REGISTRATION_SUCCESS", "EMAIL_VERIFICATION", "PASSWORD_RESET"] as const;
 
 export type EmailJobType = (typeof EMAIL_JOB_TYPES)[number];
 
@@ -21,6 +21,14 @@ export interface RegistrationSuccessEmailInput {
 }
 
 export interface EmailVerificationEmailInput {
+  to: string;
+  code: string;
+  expiresInMinutes: number;
+}
+
+// Gap 1 — password reset uses the same shape as first-login verification;
+// distinct type/subject so the two are never visually confused in an inbox.
+export interface PasswordResetEmailInput {
   to: string;
   code: string;
   expiresInMinutes: number;
@@ -56,6 +64,23 @@ export function buildEmailVerificationEmail(input: EmailVerificationEmailInput):
       "<p>Use this code to set up your Innogeeks app password:</p>",
       `<p><strong>${escapeHtmlText(input.code)}</strong></p>`,
       `<p>This code expires in ${input.expiresInMinutes} minutes. Do not share it with anyone.</p>`,
+    ].join(""),
+  };
+}
+
+export function buildPasswordResetEmail(input: PasswordResetEmailInput): EmailPayload {
+  return {
+    to: input.to,
+    subject: "Your Innogeeks password reset code",
+    text: [
+      "Use this code to reset your Innogeeks app password:",
+      input.code,
+      `This code expires in ${input.expiresInMinutes} minutes. If you did not request this, you can ignore this email — your current password stays unchanged.`,
+    ].join("\n\n"),
+    html: [
+      "<p>Use this code to reset your Innogeeks app password:</p>",
+      `<p><strong>${escapeHtmlText(input.code)}</strong></p>`,
+      `<p>This code expires in ${input.expiresInMinutes} minutes. If you did not request this, you can ignore this email — your current password stays unchanged.</p>`,
     ].join(""),
   };
 }
