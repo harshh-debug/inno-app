@@ -20,11 +20,20 @@ export interface AppRecruitmentTestSlot {
   endTime: string | null;
 }
 
+export interface AppRecruitmentInterview {
+  assigned: boolean;
+  startTime: string | null;
+  endTime: string | null;
+  location: string | null;
+  meetingUrl: string | null;
+}
+
 export interface AppRecruitmentSummary {
   paid: boolean;
   decision: RecruitmentDecision;
   decisionNote: string | null;
   testSlot: AppRecruitmentTestSlot;
+  interview: AppRecruitmentInterview;
 }
 
 // PATCH /app/me — self-editable subset of AppProfile.

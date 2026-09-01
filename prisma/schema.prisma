@@ -362,10 +362,12 @@ model TestSlotBooking {
 }
 
 // ─────────────────────────────────────────────
-// Interview slot booking — future structure retained but unused in Phase 1.
-// Admin pre-creates fixed slots (date/time/capacity/interviewer);
-// student books one open slot. Capacity is enforced at the service layer
-// by counting active (non-cancelled) SlotBooking rows against slot.capacity.
+// Interview scheduling. Admin pre-creates fixed slots (date/time/capacity/
+// interviewer), then assigns each registration to one — same admin-assigns
+// model as TestSlot/TestSlotBooking, no student self-booking. Capacity is
+// enforced the same way too: bookedCount is an atomic conditional counter,
+// maintained only by the assignment service (never edited directly by
+// admins).
 // ─────────────────────────────────────────────
 
 model InterviewSlot {
@@ -378,6 +380,7 @@ model InterviewSlot {
   meetingUrl         String?  @map("meeting_url") @db.Text
   capacity           Int      @default(1)
   isCancelled        Boolean  @default(false) @map("is_cancelled")
+  bookedCount        Int      @default(0) @map("booked_count")
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)

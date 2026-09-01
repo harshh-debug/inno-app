@@ -52,6 +52,9 @@ export class PrismaAppProfileRepository implements AppProfileRepository {
         testSlotBooking: {
           select: { testSlot: { select: { startTime: true, endTime: true } } },
         },
+        slotBooking: {
+          select: { slot: { select: { startTime: true, endTime: true, location: true, meetingUrl: true } } },
+        },
       },
     });
 
@@ -67,6 +70,13 @@ export class PrismaAppProfileRepository implements AppProfileRepository {
         booked: registration.testSlotBooking !== null,
         startTime: registration.testSlotBooking?.testSlot.startTime.toISOString() ?? null,
         endTime: registration.testSlotBooking?.testSlot.endTime.toISOString() ?? null,
+      },
+      interview: {
+        assigned: registration.slotBooking !== null,
+        startTime: registration.slotBooking?.slot.startTime.toISOString() ?? null,
+        endTime: registration.slotBooking?.slot.endTime.toISOString() ?? null,
+        location: registration.slotBooking?.slot.location ?? null,
+        meetingUrl: registration.slotBooking?.slot.meetingUrl ?? null,
       },
     };
   }

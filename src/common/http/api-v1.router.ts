@@ -26,6 +26,13 @@ import {
 } from "../../modules/test-slots/test-slot.routes.js";
 import type { UserController } from "../../modules/users/user.controller.js";
 import { createAdminUserRouter } from "../../modules/users/user.routes.js";
+import type { InterviewSlotController } from "../../modules/interview-slots/interview-slot.controller.js";
+import {
+  createAdminCycleInterviewSlotRouter,
+  createAdminInterviewSlotRouter,
+  createAdminRegistrationInterviewSlotRouter,
+  createInterviewSlotRouter,
+} from "../../modules/interview-slots/interview-slot.routes.js";
 
 export interface AuthenticationRouterDependencies {
   controller: AuthController;
@@ -56,6 +63,10 @@ export interface UsersRouterDependencies {
   controller: UserController;
 }
 
+export interface InterviewSlotsRouterDependencies {
+  controller: InterviewSlotController;
+}
+
 /**
  * Stable client namespaces. Feature routers are mounted here as their modules
  * are implemented. Admin-only routers require `authentication` to be
@@ -69,6 +80,7 @@ export function createApiV1Router(
   appProfile?: AppProfileRouterDependencies,
   testSlots?: TestSlotsRouterDependencies,
   users?: UsersRouterDependencies,
+  interviewSlots?: InterviewSlotsRouterDependencies,
 ): Router {
   const router = Router();
 
@@ -126,6 +138,19 @@ export function createApiV1Router(
 
     if (users !== undefined) {
       adminRouter.use("/users", createAdminUserRouter(users.controller, adminGuard));
+    }
+
+    if (interviewSlots !== undefined) {
+      appRouter.use(createInterviewSlotRouter(interviewSlots.controller, appStudentGuard));
+      adminRouter.use(
+        "/recruitment-cycles/:cycleId/interview-slots",
+        createAdminCycleInterviewSlotRouter(interviewSlots.controller, adminGuard),
+      );
+      adminRouter.use(
+        "/interview-slots",
+        createAdminInterviewSlotRouter(interviewSlots.controller, adminGuard),
+      );
+      adminRouter.use(createAdminRegistrationInterviewSlotRouter(interviewSlots.controller, adminGuard));
     }
   }
 
