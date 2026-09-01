@@ -1,10 +1,11 @@
 import type { PrismaClient } from "../../../generated/prisma/client.js";
-import type { AppProfile, AppProfileRepository, AppRecruitmentSummary } from "./app-profile.types.js";
+import type { AppProfile, AppProfileRepository, AppProfileUpdate, AppRecruitmentSummary } from "./app-profile.types.js";
 
 /**
- * Read-only. Everything here already went through `requireAppStudent`
- * (paid, active-cycle, non-suspended) before reaching this repository, so
- * no eligibility filtering happens again down here.
+ * Reads here already went through `requireAppStudent` (paid, active-cycle,
+ * non-suspended) before reaching this repository, so no eligibility
+ * filtering happens again down here. `updateProfile` only ever writes
+ * fullName/phone — batch/year/role are admin-panel-only.
  */
 export class PrismaAppProfileRepository implements AppProfileRepository {
   constructor(private readonly prisma: PrismaClient) {}
@@ -15,6 +16,14 @@ export class PrismaAppProfileRepository implements AppProfileRepository {
       select: { collegeEmail: true, fullName: true, phone: true, batch: true, year: true, role: true },
     });
     return user;
+  }
+
+  async updateProfile(userId: string, input: AppProfileUpdate): Promise<AppProfile> {
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: { fullName: input.fullName, phone: input.phone },
+      select: { collegeEmail: true, fullName: true, phone: true, batch: true, year: true, role: true },
+    });
   }
 
   async findRecruitmentSummaryByUserId(userId: string): Promise<AppRecruitmentSummary | null> {
