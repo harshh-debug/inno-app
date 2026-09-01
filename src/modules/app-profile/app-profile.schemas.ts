@@ -3,12 +3,14 @@ import { z } from "zod";
 // PATCH /app/me — only the two fields a student can self-edit. Batch/year/role
 // are admin-panel-only (the club only recruits first-years, so those aren't
 // self-reported); collegeEmail is the immutable login identity.
-// Digits with an optional leading + and optional space/hyphen separators, 7-15 digits total —
-// permissive enough for international numbers, strict enough to reject obvious garbage.
+// Accepts digits with an optional leading + and space/hyphen separators (e.g. "+91 98765
+// 43210"), but strips the separators before storage so the stored value is always compact
+// (e.g. "+919876543210") regardless of how the client formatted it.
 const phone = z
   .string()
   .trim()
   .regex(/^\+?[\d\s-]+$/, "Phone must contain only digits, spaces, hyphens, and an optional leading +")
+  .transform((value) => value.replace(/[\s-]/g, ""))
   .refine((value) => {
     const digitCount = value.replace(/\D/g, "").length;
     return digitCount >= 7 && digitCount <= 15;
