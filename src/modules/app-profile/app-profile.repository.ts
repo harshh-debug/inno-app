@@ -13,7 +13,15 @@ export class PrismaAppProfileRepository implements AppProfileRepository {
   async findProfileByUserId(userId: string): Promise<AppProfile | null> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { collegeEmail: true, fullName: true, phone: true, batch: true, year: true, role: true },
+      select: {
+        collegeEmail: true,
+        fullName: true,
+        phone: true,
+        batch: true,
+        year: true,
+        role: true,
+        domain: true,
+      },
     });
     return user;
   }
@@ -22,7 +30,15 @@ export class PrismaAppProfileRepository implements AppProfileRepository {
     return this.prisma.user.update({
       where: { id: userId },
       data: { fullName: input.fullName, phone: input.phone },
-      select: { collegeEmail: true, fullName: true, phone: true, batch: true, year: true, role: true },
+      select: {
+        collegeEmail: true,
+        fullName: true,
+        phone: true,
+        batch: true,
+        year: true,
+        role: true,
+        domain: true,
+      },
     });
   }
 

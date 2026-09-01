@@ -1,4 +1,4 @@
-import { PlatformRole, type User } from "../../../generated/prisma/client.js";
+import { PlatformRole, Prisma, type User } from "../../../generated/prisma/client.js";
 import { AppError } from "../../common/errors.js";
 import { isPrismaUniqueConstraintError } from "../../common/prisma-errors.js";
 import { deriveAccountState, type DerivedAccountState } from "./account-state.js";
@@ -6,6 +6,7 @@ import { normalizeEmail } from "./email.js";
 import type {
   ControlledAdminProvisioningInput,
   FindOrCreateUserResult,
+  PromoteUserInput,
   ProvisionalStudentInput,
   RegistrationUserProfileInput,
   UserRepository,
@@ -109,11 +110,47 @@ export class UserService {
     }
   }
 
+  /**
+   * Admin-only role/domain change (10_USER_FLOWS.md §5-6). MEMBER and
+   * COORDINATOR always carry exactly one domain; REGISTERED never does —
+   * demoting back to REGISTERED clears it. ADMIN's domain is optional
+   * (Core Team isn't tied to one), so an existing domain simply carries over
+   * if the caller doesn't specify one.
+   */
+  async promote(userId: string, input: PromoteUserInput): Promise<User> {
+    const existingUser = await this.userRepository.findById(userId);
+    if (existingUser === null) {
+      throw new AppError("USER_NOT_FOUND", 404, "User not found");
+    }
+
+    const domain =
+      input.role === PlatformRole.REGISTERED
+        ? null
+        : (input.domain ?? (input.role === PlatformRole.ADMIN ? existingUser.domain : null));
+
+    if ((input.role === PlatformRole.MEMBER || input.role === PlatformRole.COORDINATOR) && domain === null) {
+      throw new AppError(
+        "DOMAIN_REQUIRED_FOR_ROLE",
+        400,
+        "A domain must be provided when promoting to Member or Coordinator",
+      );
+    }
+
+    try {
+      return await this.userRepository.setRoleAndDomain(userId, input.role, domain);
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
+        throw new AppError("USER_NOT_FOUND", 404, "User not found");
+      }
+      throw error;
+    }
+  }
+
   private async reuseStudent(
     existingUser: User,
     profile: ReturnType<UserService["toStoredProfile"]>,
   ): Promise<FindOrCreateUserResult> {
-    if (existingUser.role !== PlatformRole.FIRST_YEAR_STUDENT) {
+    if (existingUser.role !== PlatformRole.REGISTERED) {
       throw this.incompatibleRoleError();
     }
 

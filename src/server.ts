@@ -32,6 +32,7 @@ const app = createApp(
     publicRegistrationController: registrationsModule.publicRegistrationController,
   },
   { controller: appProfileModule.controller },
+  { controller: usersModule.controller },
 );
 
 const server = app.listen(environment.PORT, () => {
