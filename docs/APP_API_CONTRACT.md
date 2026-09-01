@@ -1,7 +1,7 @@
 # Innogeeks Android App API Contract
 
-Contract version: `0.2.0`  
-Last updated: `2026-08-08`  
+Contract version: `0.3.0`  
+Last updated: `2026-09-01`  
 API namespace: `/api/v1/app`
 
 This document contains only Android app endpoints that are currently
@@ -594,6 +594,12 @@ login identity, and `batch`/`year`/`role` are admin-panel-only: the club only
 recruits first-years, so those fields describe the student's registration
 record, not something they self-report.
 
+`fullName`, if present, is trimmed and must be 1-200 characters. `phone`, if
+present, may contain digits, spaces, hyphens, and an optional leading `+`; it
+is normalized by stripping spaces and hyphens before storage (e.g.
+`"+91 98765 43210"` is stored as `"+919876543210"`), and must contain 7-15
+digits after normalization.
+
 Response shape is identical to `GET /me` (`200 OK`, same envelope and field
 set) reflecting the values just written, so the client can replace its local
 copy directly instead of re-fetching.
@@ -602,9 +608,10 @@ copy directly instead of re-fetching.
 
 | HTTP | Code | App action |
 |---|---|---|
-| `400` | `VALIDATION_ERROR` | Show the field error (e.g. empty string, over length limit) |
+| `400` | `VALIDATION_ERROR` | Show the field error (e.g. empty string, over length limit, phone not 7-15 digits, neither field present) |
 | `401` | `UNAUTHORIZED` | Session expired, drop to guest mode |
 | `403` | `APP_ACCESS_DENIED` | Show access-denied state, not session-expired |
+| `404` | `USER_NOT_FOUND` | Treat as session-invalid; drop to guest mode (rare race: account removed between requests) |
 
 ## 13. Recruitment status
 
