@@ -1,6 +1,6 @@
 # Innogeeks Android App API Contract
 
-Contract version: `0.3.0`  
+Contract version: `0.4.0`  
 Last updated: `2026-09-01`  
 API namespace: `/api/v1/app`
 
@@ -153,7 +153,7 @@ Input:
 The backend normalizes the email before identity matching. The student is
 eligible only when all of these are true:
 
-- The user exists and has the first-year-student role.
+- The user exists and has the registered-student role.
 - The user has a registration in the internally resolved active cycle.
 - That registration is `PAID`.
 - The user is not suspended.
@@ -551,7 +551,8 @@ Status: `200 OK`
     "phone": "9999999999",
     "batch": "CSE 2024-2028",
     "year": 2,
-    "role": "FIRST_YEAR_STUDENT"
+    "role": "REGISTERED",
+    "domain": null
   }
 }
 ```
@@ -563,13 +564,13 @@ Status: `200 OK`
 | `phone` | string \| null | captured at registration |
 | `batch` | string \| null | free-text as captured at registration (e.g. "CSE 2024-2028"); not a structured branch/section field |
 | `year` | number \| null | captured at registration |
-| `role` | string | always `FIRST_YEAR_STUDENT` for any account that can reach these endpoints in Phase 1 |
+| `role` | string | one of `REGISTERED`, `MEMBER`, `COORDINATOR`, `ADMIN` (an admin account can technically reach `/app` endpoints too, but Phase 1's onboarding/registration flow only ever produces `REGISTERED`) |
+| `domain` | string \| null | one of `ANDROID`, `WEB`, `ML`, `IOT`, `AR_VR`, or `null`. Always `null` for `REGISTERED`; set by an admin when promoting to `MEMBER`/`COORDINATOR` (optional for `ADMIN`). Not embedded in the access token — always read fresh here, so re-fetch on splash/app-resume to pick up a promotion made mid-session. |
 
-`enrollmentNumber`, `branch`, `section`, `semester`, `CGPA`, and domain
-preferences are **not** returned because they are not captured anywhere in
-the current data model. Domain assignment is explicitly out of scope for
-Phase 1, not merely deferred. Do not add UI slots for these fields yet; wait
-for a follow-up contract version if that data ever gets collected.
+`enrollmentNumber`, `branch`, `section`, `semester`, and `CGPA` are **not**
+returned because they are not captured anywhere in the current data model.
+Do not add UI slots for these fields yet; wait for a follow-up contract
+version if that data ever gets collected.
 
 ### Errors
 
@@ -593,9 +594,15 @@ Content-Type: application/json
 
 Both fields are optional but at least one must be present (partial update).
 Only `fullName` and `phone` are editable — `collegeEmail` is the immutable
-login identity, and `batch`/`year`/`role` are admin-panel-only: the club only
-recruits first-years, so those fields describe the student's registration
-record, not something they self-report.
+login identity, and `batch`/`year`/`role`/`domain` are admin-panel-only:
+`batch`/`year` describe the student's registration record, and `role`/`domain`
+change only through the admin promotion flow, never self-service.
+
+`fullName`, if present, is trimmed and must be 1-200 characters. `phone`, if
+present, may contain digits, spaces, hyphens, and an optional leading `+`; it
+is normalized by stripping spaces and hyphens before storage (e.g.
+`"+91 98765 43210"` is stored as `"+919876543210"`), and must contain 7-15
+digits after normalization.
 
 Response shape is identical to `GET /me` (`200 OK`, same envelope and field
 set) reflecting the values just written, so the client can replace its local
@@ -605,9 +612,10 @@ copy directly instead of re-fetching.
 
 | HTTP | Code | App action |
 |---|---|---|
-| `400` | `VALIDATION_ERROR` | Show the field error (e.g. empty string, over length limit) |
+| `400` | `VALIDATION_ERROR` | Show the field error (e.g. empty string, over length limit, phone not 7-15 digits, neither field present) |
 | `401` | `UNAUTHORIZED` | Session expired, drop to guest mode |
 | `403` | `APP_ACCESS_DENIED` | Show access-denied state, not session-expired |
+| `404` | `USER_NOT_FOUND` | Treat as session-invalid; drop to guest mode (rare race: account removed between requests) |
 
 ## 13. Recruitment status
 

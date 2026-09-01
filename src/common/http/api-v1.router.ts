@@ -23,6 +23,8 @@ import {
   createAdminTestSlotRouter,
   createTestSlotRouter,
 } from "../../modules/test-slots/test-slot.routes.js";
+import type { UserController } from "../../modules/users/user.controller.js";
+import { createAdminUserRouter } from "../../modules/users/user.routes.js";
 
 export interface AuthenticationRouterDependencies {
   controller: AuthController;
@@ -49,6 +51,10 @@ export interface TestSlotsRouterDependencies {
   controller: TestSlotController;
 }
 
+export interface UsersRouterDependencies {
+  controller: UserController;
+}
+
 /**
  * Stable client namespaces. Feature routers are mounted here as their modules
  * are implemented. Admin-only routers require `authentication` to be
@@ -61,6 +67,7 @@ export function createApiV1Router(
   registrations?: RegistrationsRouterDependencies,
   appProfile?: AppProfileRouterDependencies,
   testSlots?: TestSlotsRouterDependencies,
+  users?: UsersRouterDependencies,
 ): Router {
   const router = Router();
 
@@ -113,6 +120,10 @@ export function createApiV1Router(
         createAdminCycleTestSlotRouter(testSlots.controller, adminGuard),
       );
       adminRouter.use("/test-slots", createAdminTestSlotRouter(testSlots.controller, adminGuard));
+    }
+
+    if (users !== undefined) {
+      adminRouter.use("/users", createAdminUserRouter(users.controller, adminGuard));
     }
   }
 

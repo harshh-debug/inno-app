@@ -35,6 +35,7 @@ const app = createApp(
   },
   { controller: appProfileModule.controller },
   { controller: testSlotModule.controller },
+  { controller: usersModule.controller },
 );
 
 const server = app.listen(environment.PORT, () => {

@@ -1,4 +1,4 @@
-import type { PlatformRole, RecruitmentDecision } from "../../../generated/prisma/client.js";
+import type { Domain, PlatformRole, RecruitmentDecision } from "../../../generated/prisma/client.js";
 
 // Gap 2 — GET /app/me. Only fields that actually exist on the schema today.
 // enrollmentNumber / branch / section / semester / CGPA / domainPreferences
@@ -10,6 +10,7 @@ export interface AppProfile {
   batch: string | null;
   year: number | null;
   role: PlatformRole;
+  domain: Domain | null;
 }
 
 // Gap 3 — GET /app/recruitment
