@@ -1,7 +1,12 @@
-import type { Response } from "express";
+import type { Request, Response } from "express";
 import { AppError } from "../../common/errors.js";
 import type { AuthenticatedRequest } from "../authentication/auth.middleware.js";
-import type { BookTestSlotRequest } from "./test-slot.schemas.js";
+import type {
+  BookTestSlotRequest,
+  CreateTestSlotRequest,
+  ReorderTestSlotsRequest,
+  UpdateTestSlotRequest,
+} from "./test-slot.schemas.js";
 import type { TestSlotService } from "./test-slot.service.js";
 
 export class TestSlotController {
@@ -27,5 +32,35 @@ export class TestSlotController {
     }
     const { testSlotId } = request.body as BookTestSlotRequest;
     response.status(201).json({ data: await this.service.bookSlot(request.auth.userId, testSlotId) });
+  };
+
+  listSlotsForCycle = async (request: Request, response: Response): Promise<void> => {
+    const { cycleId } = request.params as { cycleId: string };
+    response.json({ data: await this.service.listSlotsForCycle(cycleId) });
+  };
+
+  createSlot = async (request: Request, response: Response): Promise<void> => {
+    const { cycleId } = request.params as { cycleId: string };
+    const body = request.body as CreateTestSlotRequest;
+    const slot = await this.service.createSlot(cycleId, body);
+    response.status(201).json({ data: slot });
+  };
+
+  updateSlot = async (request: Request, response: Response): Promise<void> => {
+    const { slotId } = request.params as { slotId: string };
+    const { confirmTimeChange, ...input } = request.body as UpdateTestSlotRequest;
+    const slot = await this.service.updateSlot(slotId, input, confirmTimeChange);
+    response.json({ data: slot });
+  };
+
+  reorderSlots = async (request: Request, response: Response): Promise<void> => {
+    const { cycleId } = request.params as { cycleId: string };
+    const body = request.body as ReorderTestSlotsRequest;
+    response.json({ data: await this.service.reorderSlots(cycleId, body.testSlotIds) });
+  };
+
+  listBookings = async (request: Request, response: Response): Promise<void> => {
+    const { slotId } = request.params as { slotId: string };
+    response.json({ data: await this.service.listBookings(slotId) });
   };
 }

@@ -18,7 +18,11 @@ import { createPublicRegistrationRouter } from "../../modules/registrations/publ
 import type { AppProfileController } from "../../modules/app-profile/app-profile.controller.js";
 import { createAppProfileRouter } from "../../modules/app-profile/app-profile.routes.js";
 import type { TestSlotController } from "../../modules/test-slots/test-slot.controller.js";
-import { createTestSlotRouter } from "../../modules/test-slots/test-slot.routes.js";
+import {
+  createAdminCycleTestSlotRouter,
+  createAdminTestSlotRouter,
+  createTestSlotRouter,
+} from "../../modules/test-slots/test-slot.routes.js";
 
 export interface AuthenticationRouterDependencies {
   controller: AuthController;
@@ -104,6 +108,11 @@ export function createApiV1Router(
 
     if (testSlots !== undefined) {
       appRouter.use(createTestSlotRouter(testSlots.controller, appStudentGuard));
+      adminRouter.use(
+        "/recruitment-cycles/:cycleId/test-slots",
+        createAdminCycleTestSlotRouter(testSlots.controller, adminGuard),
+      );
+      adminRouter.use("/test-slots", createAdminTestSlotRouter(testSlots.controller, adminGuard));
     }
   }
 
