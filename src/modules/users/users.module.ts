@@ -1,4 +1,5 @@
 import { type Prisma, type PrismaClient } from "../../../generated/prisma/client.js";
+import { UserController } from "./user.controller.js";
 import { PrismaUserRepository } from "./user.repository.js";
 import { UserService } from "./user.service.js";
 
@@ -8,10 +9,12 @@ import { UserService } from "./user.service.js";
 export function createUsersModule(prisma: PrismaClient) {
   const userRepository = new PrismaUserRepository(prisma);
   const userService = new UserService(userRepository);
+  const controller = new UserController(userService);
 
   return {
     userRepository,
     userService,
+    controller,
     /** Use inside a caller-owned Prisma transaction, never inside a request handler. */
     forTransaction(transaction: Prisma.TransactionClient) {
       const transactionRepository = new PrismaUserRepository(transaction);

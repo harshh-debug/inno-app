@@ -17,6 +17,22 @@ import type { PublicRegistrationController } from "../../modules/registrations/p
 import { createPublicRegistrationRouter } from "../../modules/registrations/public/index.js";
 import type { AppProfileController } from "../../modules/app-profile/app-profile.controller.js";
 import { createAppProfileRouter } from "../../modules/app-profile/app-profile.routes.js";
+import type { TestSlotController } from "../../modules/test-slots/test-slot.controller.js";
+import {
+  createAdminCycleTestSlotRouter,
+  createAdminRegistrationTestSlotRouter,
+  createAdminTestSlotRouter,
+  createTestSlotRouter,
+} from "../../modules/test-slots/test-slot.routes.js";
+import type { UserController } from "../../modules/users/user.controller.js";
+import { createAdminUserRouter } from "../../modules/users/user.routes.js";
+import type { InterviewSlotController } from "../../modules/interview-slots/interview-slot.controller.js";
+import {
+  createAdminCycleInterviewSlotRouter,
+  createAdminInterviewSlotRouter,
+  createAdminRegistrationInterviewSlotRouter,
+  createInterviewSlotRouter,
+} from "../../modules/interview-slots/interview-slot.routes.js";
 
 export interface AuthenticationRouterDependencies {
   controller: AuthController;
@@ -39,6 +55,18 @@ export interface AppProfileRouterDependencies {
   controller: AppProfileController;
 }
 
+export interface TestSlotsRouterDependencies {
+  controller: TestSlotController;
+}
+
+export interface UsersRouterDependencies {
+  controller: UserController;
+}
+
+export interface InterviewSlotsRouterDependencies {
+  controller: InterviewSlotController;
+}
+
 /**
  * Stable client namespaces. Feature routers are mounted here as their modules
  * are implemented. Admin-only routers require `authentication` to be
@@ -50,6 +78,9 @@ export function createApiV1Router(
   recruitmentCycles?: RecruitmentCyclesRouterDependencies,
   registrations?: RegistrationsRouterDependencies,
   appProfile?: AppProfileRouterDependencies,
+  testSlots?: TestSlotsRouterDependencies,
+  users?: UsersRouterDependencies,
+  interviewSlots?: InterviewSlotsRouterDependencies,
 ): Router {
   const router = Router();
 
@@ -93,6 +124,33 @@ export function createApiV1Router(
 
     if (appProfile !== undefined) {
       appRouter.use(createAppProfileRouter(appProfile.controller, appStudentGuard));
+    }
+
+    if (testSlots !== undefined) {
+      appRouter.use(createTestSlotRouter(testSlots.controller, appStudentGuard));
+      adminRouter.use(
+        "/recruitment-cycles/:cycleId/test-slots",
+        createAdminCycleTestSlotRouter(testSlots.controller, adminGuard),
+      );
+      adminRouter.use("/test-slots", createAdminTestSlotRouter(testSlots.controller, adminGuard));
+      adminRouter.use(createAdminRegistrationTestSlotRouter(testSlots.controller, adminGuard));
+    }
+
+    if (users !== undefined) {
+      adminRouter.use("/users", createAdminUserRouter(users.controller, adminGuard));
+    }
+
+    if (interviewSlots !== undefined) {
+      appRouter.use(createInterviewSlotRouter(interviewSlots.controller, appStudentGuard));
+      adminRouter.use(
+        "/recruitment-cycles/:cycleId/interview-slots",
+        createAdminCycleInterviewSlotRouter(interviewSlots.controller, adminGuard),
+      );
+      adminRouter.use(
+        "/interview-slots",
+        createAdminInterviewSlotRouter(interviewSlots.controller, adminGuard),
+      );
+      adminRouter.use(createAdminRegistrationInterviewSlotRouter(interviewSlots.controller, adminGuard));
     }
   }
 

@@ -13,7 +13,15 @@ export class PrismaAppProfileRepository implements AppProfileRepository {
   async findProfileByUserId(userId: string): Promise<AppProfile | null> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { collegeEmail: true, fullName: true, phone: true, batch: true, year: true, role: true },
+      select: {
+        collegeEmail: true,
+        fullName: true,
+        phone: true,
+        batch: true,
+        year: true,
+        role: true,
+        domain: true,
+      },
     });
     return user;
   }
@@ -22,7 +30,15 @@ export class PrismaAppProfileRepository implements AppProfileRepository {
     return this.prisma.user.update({
       where: { id: userId },
       data: { fullName: input.fullName, phone: input.phone },
-      select: { collegeEmail: true, fullName: true, phone: true, batch: true, year: true, role: true },
+      select: {
+        collegeEmail: true,
+        fullName: true,
+        phone: true,
+        batch: true,
+        year: true,
+        role: true,
+        domain: true,
+      },
     });
   }
 
@@ -35,6 +51,9 @@ export class PrismaAppProfileRepository implements AppProfileRepository {
         decisionNote: true,
         testSlotBooking: {
           select: { testSlot: { select: { startTime: true, endTime: true } } },
+        },
+        slotBooking: {
+          select: { slot: { select: { startTime: true, endTime: true, location: true, meetingUrl: true } } },
         },
       },
     });
@@ -51,6 +70,13 @@ export class PrismaAppProfileRepository implements AppProfileRepository {
         booked: registration.testSlotBooking !== null,
         startTime: registration.testSlotBooking?.testSlot.startTime.toISOString() ?? null,
         endTime: registration.testSlotBooking?.testSlot.endTime.toISOString() ?? null,
+      },
+      interview: {
+        assigned: registration.slotBooking !== null,
+        startTime: registration.slotBooking?.slot.startTime.toISOString() ?? null,
+        endTime: registration.slotBooking?.slot.endTime.toISOString() ?? null,
+        location: registration.slotBooking?.slot.location ?? null,
+        meetingUrl: registration.slotBooking?.slot.meetingUrl ?? null,
       },
     };
   }

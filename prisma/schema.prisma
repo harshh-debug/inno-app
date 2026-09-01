@@ -14,9 +14,20 @@ datasource db {
 // ─────────────────────────────────────────────
 
 enum PlatformRole {
-  FIRST_YEAR_STUDENT
+  REGISTERED
+  MEMBER
   COORDINATOR
   ADMIN
+}
+
+// One domain per Member/Coordinator/Admin, assigned by an admin on
+// promotion (10_USER_FLOWS.md §5) — null until promoted past REGISTERED.
+enum Domain {
+  ANDROID
+  WEB
+  ML
+  IOT
+  AR_VR
 }
 
 enum InputType {
@@ -67,10 +78,13 @@ model User {
   normalizedEmail String       @unique @map("normalized_email") @db.VarChar(320)
   passwordHash    String?      @map("password_hash")
   emailVerifiedAt DateTime?    @map("email_verified_at") @db.Timestamptz(3)
-  role            PlatformRole @default(FIRST_YEAR_STUDENT)
+  role            PlatformRole @default(REGISTERED)
   isSuspended     Boolean      @default(false) @map("is_suspended")
+  // Null until an admin promotes past REGISTERED; cleared back to null on
+  // demotion to REGISTERED. Enforced in UserService, not at the DB level.
+  domain          Domain?      @map("domain")
 
-  // Student profile fields (only meaningful for FIRST_YEAR_STUDENT, kept on User
+  // Student profile fields (only meaningful for REGISTERED, kept on User
   // since one registration per cycle and no app-channel dedup complexity to justify
   // a separate profile table right now)
   fullName String? @map("full_name") @db.VarChar(200)
@@ -318,6 +332,10 @@ model TestSlot {
   order              Int
   isVisible          Boolean  @default(false) @map("is_visible")
   capacity           Int      @default(1)
+  // Maintained only by the booking service via an atomic conditional
+  // increment (never edited directly by admins); the source of truth for
+  // whether a slot still has room, so booking never has to COUNT(bookings).
+  bookedCount        Int      @default(0) @map("booked_count")
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
@@ -344,10 +362,12 @@ model TestSlotBooking {
 }
 
 // ─────────────────────────────────────────────
-// Interview slot booking — future structure retained but unused in Phase 1.
-// Admin pre-creates fixed slots (date/time/capacity/interviewer);
-// student books one open slot. Capacity is enforced at the service layer
-// by counting active (non-cancelled) SlotBooking rows against slot.capacity.
+// Interview scheduling. Admin pre-creates fixed slots (date/time/capacity/
+// interviewer), then assigns each registration to one — same admin-assigns
+// model as TestSlot/TestSlotBooking, no student self-booking. Capacity is
+// enforced the same way too: bookedCount is an atomic conditional counter,
+// maintained only by the assignment service (never edited directly by
+// admins).
 // ─────────────────────────────────────────────
 
 model InterviewSlot {
@@ -360,6 +380,7 @@ model InterviewSlot {
   meetingUrl         String?  @map("meeting_url") @db.Text
   capacity           Int      @default(1)
   isCancelled        Boolean  @default(false) @map("is_cancelled")
+  bookedCount        Int      @default(0) @map("booked_count")
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)

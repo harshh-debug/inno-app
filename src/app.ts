@@ -9,6 +9,9 @@ import {
   type AuthenticationRouterDependencies,
   type RecruitmentCyclesRouterDependencies,
   type RegistrationsRouterDependencies,
+  type TestSlotsRouterDependencies,
+  type UsersRouterDependencies,
+  type InterviewSlotsRouterDependencies,
 } from "./common/http/api-v1.router.js";
 import { errorHandler, notFoundHandler } from "./common/http/error.middleware.js";
 
@@ -18,6 +21,9 @@ export function createApp(
   recruitmentCycles?: RecruitmentCyclesRouterDependencies,
   registrations?: RegistrationsRouterDependencies,
   appProfile?: AppProfileRouterDependencies,
+  testSlots?: TestSlotsRouterDependencies,
+  users?: UsersRouterDependencies,
+  interviewSlots?: InterviewSlotsRouterDependencies,
 ): Express {
   const app = express();
   const healthService = new HealthService(prisma);
@@ -26,7 +32,18 @@ export function createApp(
   app.disable("x-powered-by");
   app.use(express.json({ limit: "1mb" }));
   app.use(createHealthRouter(healthController));
-  app.use("/api/v1", createApiV1Router(authentication, recruitmentCycles, registrations, appProfile));
+  app.use(
+    "/api/v1",
+    createApiV1Router(
+      authentication,
+      recruitmentCycles,
+      registrations,
+      appProfile,
+      testSlots,
+      users,
+      interviewSlots,
+    ),
+  );
   app.use(notFoundHandler);
   app.use(errorHandler);
 

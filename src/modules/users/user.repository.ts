@@ -22,7 +22,7 @@ export class PrismaUserRepository implements UserRepository {
     return this.prisma.user.create({
       data: {
         ...input,
-        role: PlatformRole.FIRST_YEAR_STUDENT,
+        role: PlatformRole.REGISTERED,
         passwordHash: null,
         emailVerifiedAt: null,
         isSuspended: false,
@@ -44,5 +44,13 @@ export class PrismaUserRepository implements UserRepository {
         isSuspended: false,
       },
     });
+  };
+
+  setRoleAndDomain = (
+    userId: string,
+    role: Parameters<UserRepository["setRoleAndDomain"]>[1],
+    domain: Parameters<UserRepository["setRoleAndDomain"]>[2],
+  ): Promise<User> => {
+    return this.prisma.user.update({ where: { id: userId }, data: { role, domain } });
   };
 }
