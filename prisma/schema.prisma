@@ -318,6 +318,10 @@ model TestSlot {
   order              Int
   isVisible          Boolean  @default(false) @map("is_visible")
   capacity           Int      @default(1)
+  // Maintained only by the booking service via an atomic conditional
+  // increment (never edited directly by admins); the source of truth for
+  // whether a slot still has room, so booking never has to COUNT(bookings).
+  bookedCount        Int      @default(0) @map("booked_count")
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)

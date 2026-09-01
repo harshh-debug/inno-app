@@ -17,6 +17,8 @@ import type { PublicRegistrationController } from "../../modules/registrations/p
 import { createPublicRegistrationRouter } from "../../modules/registrations/public/index.js";
 import type { AppProfileController } from "../../modules/app-profile/app-profile.controller.js";
 import { createAppProfileRouter } from "../../modules/app-profile/app-profile.routes.js";
+import type { TestSlotController } from "../../modules/test-slots/test-slot.controller.js";
+import { createTestSlotRouter } from "../../modules/test-slots/test-slot.routes.js";
 
 export interface AuthenticationRouterDependencies {
   controller: AuthController;
@@ -39,6 +41,10 @@ export interface AppProfileRouterDependencies {
   controller: AppProfileController;
 }
 
+export interface TestSlotsRouterDependencies {
+  controller: TestSlotController;
+}
+
 /**
  * Stable client namespaces. Feature routers are mounted here as their modules
  * are implemented. Admin-only routers require `authentication` to be
@@ -50,6 +56,7 @@ export function createApiV1Router(
   recruitmentCycles?: RecruitmentCyclesRouterDependencies,
   registrations?: RegistrationsRouterDependencies,
   appProfile?: AppProfileRouterDependencies,
+  testSlots?: TestSlotsRouterDependencies,
 ): Router {
   const router = Router();
 
@@ -93,6 +100,10 @@ export function createApiV1Router(
 
     if (appProfile !== undefined) {
       appRouter.use(createAppProfileRouter(appProfile.controller, appStudentGuard));
+    }
+
+    if (testSlots !== undefined) {
+      appRouter.use(createTestSlotRouter(testSlots.controller, appStudentGuard));
     }
   }
 
