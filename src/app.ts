@@ -9,6 +9,7 @@ import {
   type AuthenticationRouterDependencies,
   type RecruitmentCyclesRouterDependencies,
   type RegistrationsRouterDependencies,
+  type TestSlotsRouterDependencies,
   type UsersRouterDependencies,
 } from "./common/http/api-v1.router.js";
 import { errorHandler, notFoundHandler } from "./common/http/error.middleware.js";
@@ -19,6 +20,7 @@ export function createApp(
   recruitmentCycles?: RecruitmentCyclesRouterDependencies,
   registrations?: RegistrationsRouterDependencies,
   appProfile?: AppProfileRouterDependencies,
+  testSlots?: TestSlotsRouterDependencies,
   users?: UsersRouterDependencies,
 ): Express {
   const app = express();
@@ -30,7 +32,7 @@ export function createApp(
   app.use(createHealthRouter(healthController));
   app.use(
     "/api/v1",
-    createApiV1Router(authentication, recruitmentCycles, registrations, appProfile, users),
+    createApiV1Router(authentication, recruitmentCycles, registrations, appProfile, testSlots, users),
   );
   app.use(notFoundHandler);
   app.use(errorHandler);

@@ -1,6 +1,6 @@
 # Innogeeks Android App API Contract
 
-Contract version: `0.4.0`  
+Contract version: `0.5.0`  
 Last updated: `2026-09-01`  
 API namespace: `/api/v1/app`
 
@@ -24,6 +24,7 @@ panel endpoints, or planned backend modules.
 | `GET /me` | Read the authenticated student's profile | Bearer token |
 | `PATCH /me` | Update the authenticated student's editable profile fields (`fullName`, `phone`) | Bearer token |
 | `GET /recruitment` | Read the authenticated student's payment, decision, and test-slot status | Bearer token |
+| `GET /test-slot-booking` | Read the student's own admin-assigned test slot | Bearer token |
 
 There is no app signup or app registration endpoint. A student must already
 have a paid registration created through the public registration flow.
@@ -650,8 +651,8 @@ Status: `200 OK`
 
 There is no separate "stage" field and no interview data — Phase 1 has no
 interview step. `decision` plus `testSlot.booked` are the two facts that
-define where a student stands. Booking a slot is done through a different,
-not-yet-implemented endpoint; this endpoint only reads the current state.
+define where a student stands. Booking a slot is done through the endpoints
+in §14; this endpoint only reads the current state.
 
 ### Errors
 
@@ -660,7 +661,48 @@ not-yet-implemented endpoint; this endpoint only reads the current state.
 | `401` | `UNAUTHORIZED` | Session expired, drop to guest mode |
 | `403` | `APP_ACCESS_DENIED` | Show access-denied state, not session-expired |
 
-## 14. Android integration requirements
+## 14. Test-slot booking
+
+An admin assigns each paid first-year student a test slot from the admin
+panel/API — there is no student-facing slot list or booking action. The app
+only ever reads its own assignment.
+
+### Read my assigned slot
+
+```http
+GET /api/v1/app/test-slot-booking
+Authorization: Bearer <accessToken>
+```
+
+#### Success
+
+Status: `200 OK`
+
+```json
+{
+  "data": {
+    "testSlotId": "8f14e...",
+    "startTime": "2026-09-10T09:00:00.000Z",
+    "endTime": "2026-09-10T10:00:00.000Z",
+    "bookedAt": "2026-09-01T12:00:00.000Z"
+  }
+}
+```
+
+`bookedAt` is when the admin made (or last changed) the assignment, not
+something the student set. Poll or refresh this on app-resume to pick up a
+new or changed assignment made while the student wasn't looking — it is not
+pushed to the app.
+
+#### Errors
+
+| HTTP | Code | App action |
+|---|---|---|
+| `401` | `UNAUTHORIZED` | Session expired, drop to guest mode |
+| `403` | `APP_ACCESS_DENIED` | Show access-denied state, not session-expired |
+| `404` | `TEST_SLOT_NOT_BOOKED` | Show the "no slot assigned yet" empty state |
+
+## 15. Android integration requirements
 
 - Store access tokens in secure credential storage.
 - Never log access tokens, password-setup tokens, password-reset tokens,
@@ -675,7 +717,7 @@ not-yet-implemented endpoint; this endpoint only reads the current state.
 - Always clear the locally stored token on logout, independent of whether the
   `POST /auth/logout` call succeeds.
 
-## 15. Contract change policy
+## 16. Contract change policy
 
 - This file documents implemented Android app endpoints only.
 - Add a new endpoint only after its backend module and manual end-to-end gate

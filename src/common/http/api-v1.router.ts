@@ -17,6 +17,13 @@ import type { PublicRegistrationController } from "../../modules/registrations/p
 import { createPublicRegistrationRouter } from "../../modules/registrations/public/index.js";
 import type { AppProfileController } from "../../modules/app-profile/app-profile.controller.js";
 import { createAppProfileRouter } from "../../modules/app-profile/app-profile.routes.js";
+import type { TestSlotController } from "../../modules/test-slots/test-slot.controller.js";
+import {
+  createAdminCycleTestSlotRouter,
+  createAdminRegistrationTestSlotRouter,
+  createAdminTestSlotRouter,
+  createTestSlotRouter,
+} from "../../modules/test-slots/test-slot.routes.js";
 import type { UserController } from "../../modules/users/user.controller.js";
 import { createAdminUserRouter } from "../../modules/users/user.routes.js";
 
@@ -41,6 +48,10 @@ export interface AppProfileRouterDependencies {
   controller: AppProfileController;
 }
 
+export interface TestSlotsRouterDependencies {
+  controller: TestSlotController;
+}
+
 export interface UsersRouterDependencies {
   controller: UserController;
 }
@@ -56,6 +67,7 @@ export function createApiV1Router(
   recruitmentCycles?: RecruitmentCyclesRouterDependencies,
   registrations?: RegistrationsRouterDependencies,
   appProfile?: AppProfileRouterDependencies,
+  testSlots?: TestSlotsRouterDependencies,
   users?: UsersRouterDependencies,
 ): Router {
   const router = Router();
@@ -100,6 +112,16 @@ export function createApiV1Router(
 
     if (appProfile !== undefined) {
       appRouter.use(createAppProfileRouter(appProfile.controller, appStudentGuard));
+    }
+
+    if (testSlots !== undefined) {
+      appRouter.use(createTestSlotRouter(testSlots.controller, appStudentGuard));
+      adminRouter.use(
+        "/recruitment-cycles/:cycleId/test-slots",
+        createAdminCycleTestSlotRouter(testSlots.controller, adminGuard),
+      );
+      adminRouter.use("/test-slots", createAdminTestSlotRouter(testSlots.controller, adminGuard));
+      adminRouter.use(createAdminRegistrationTestSlotRouter(testSlots.controller, adminGuard));
     }
 
     if (users !== undefined) {

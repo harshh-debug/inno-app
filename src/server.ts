@@ -7,6 +7,7 @@ import { createUsersModule } from "./modules/users/users.module.js";
 import { createRecruitmentCyclesModule } from "./modules/recruitment-cycles/recruitment-cycles.module.js";
 import { createRegistrationsModule } from "./modules/registrations/registrations.module.js";
 import { createAppProfileModule } from "./modules/app-profile/index.js";
+import { createTestSlotModule } from "./modules/test-slots/index.js";
 
 const environment = loadEnvironment();
 const prisma = createPrismaClient(environment);
@@ -21,6 +22,7 @@ const registrationsModule = createRegistrationsModule(
   notificationsModule.notificationService,
 );
 const appProfileModule = createAppProfileModule(prisma);
+const testSlotModule = createTestSlotModule(prisma);
 
 const app = createApp(
   prisma,
@@ -32,6 +34,7 @@ const app = createApp(
     publicRegistrationController: registrationsModule.publicRegistrationController,
   },
   { controller: appProfileModule.controller },
+  { controller: testSlotModule.controller },
   { controller: usersModule.controller },
 );
 
