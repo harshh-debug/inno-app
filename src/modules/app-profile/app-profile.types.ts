@@ -26,7 +26,14 @@ export interface AppRecruitmentSummary {
   testSlot: AppRecruitmentTestSlot;
 }
 
+// PATCH /app/me — self-editable subset of AppProfile.
+export interface AppProfileUpdate {
+  fullName?: string;
+  phone?: string;
+}
+
 export interface AppProfileRepository {
   findProfileByUserId(userId: string): Promise<AppProfile | null>;
   findRecruitmentSummaryByUserId(userId: string): Promise<AppRecruitmentSummary | null>;
+  updateProfile(userId: string, input: AppProfileUpdate): Promise<AppProfile>;
 }
