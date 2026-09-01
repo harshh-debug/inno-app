@@ -25,7 +25,7 @@ export class AuthRepository {
     return this.prisma.user.findFirst({
       where: {
         normalizedEmail,
-        role: PlatformRole.FIRST_YEAR_STUDENT,
+        role: PlatformRole.REGISTERED,
         isSuspended: false,
         registrations: {
           some: {
@@ -41,7 +41,7 @@ export class AuthRepository {
     return this.prisma.user.findFirst({
       where: {
         id: userId,
-        role: PlatformRole.FIRST_YEAR_STUDENT,
+        role: PlatformRole.REGISTERED,
         isSuspended: false,
         registrations: {
           some: {

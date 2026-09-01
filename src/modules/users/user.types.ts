@@ -1,4 +1,4 @@
-import type { PlatformRole, User } from "../../../generated/prisma/client.js";
+import type { Domain, PlatformRole, User } from "../../../generated/prisma/client.js";
 
 /** Basic profile values supplied by the public registration workflow. */
 export interface RegistrationUserProfileInput {
@@ -57,9 +57,15 @@ export interface UserRepository {
     passwordHash: string;
     emailVerifiedAt: Date;
   }): Promise<User>;
+  setRoleAndDomain(userId: string, role: PlatformRole, domain: Domain | null): Promise<User>;
 }
 
 export interface FindOrCreateUserResult {
   user: User;
   created: boolean;
+}
+
+export interface PromoteUserInput {
+  role: PlatformRole;
+  domain?: Domain;
 }
