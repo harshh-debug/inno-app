@@ -20,6 +20,7 @@ import { createAppProfileRouter } from "../../modules/app-profile/app-profile.ro
 import type { TestSlotController } from "../../modules/test-slots/test-slot.controller.js";
 import {
   createAdminCycleTestSlotRouter,
+  createAdminRegistrationTestSlotRouter,
   createAdminTestSlotRouter,
   createTestSlotRouter,
 } from "../../modules/test-slots/test-slot.routes.js";
@@ -120,6 +121,7 @@ export function createApiV1Router(
         createAdminCycleTestSlotRouter(testSlots.controller, adminGuard),
       );
       adminRouter.use("/test-slots", createAdminTestSlotRouter(testSlots.controller, adminGuard));
+      adminRouter.use(createAdminRegistrationTestSlotRouter(testSlots.controller, adminGuard));
     }
 
     if (users !== undefined) {

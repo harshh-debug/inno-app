@@ -1,6 +1,6 @@
 # Innogeeks Android App API Contract
 
-Contract version: `0.4.0`  
+Contract version: `0.5.0`  
 Last updated: `2026-09-01`  
 API namespace: `/api/v1/app`
 
@@ -24,9 +24,7 @@ panel endpoints, or planned backend modules.
 | `GET /me` | Read the authenticated student's profile | Bearer token |
 | `PATCH /me` | Update the authenticated student's editable profile fields (`fullName`, `phone`) | Bearer token |
 | `GET /recruitment` | Read the authenticated student's payment, decision, and test-slot status | Bearer token |
-| `GET /test-slots` | List currently bookable test slots for the active recruitment cycle | Bearer token |
-| `GET /test-slot-booking` | Read the student's own test-slot booking | Bearer token |
-| `POST /test-slot-booking` | Book a test slot | Bearer token |
+| `GET /test-slot-booking` | Read the student's own admin-assigned test slot | Bearer token |
 
 There is no app signup or app registration endpoint. A student must already
 have a paid registration created through the public registration flow.
@@ -665,55 +663,11 @@ in §14; this endpoint only reads the current state.
 
 ## 14. Test-slot booking
 
-Paid first-year students can view bookable test-slot options and book one.
-Phase 1 has no student cancellation or slot-change — once booked, a slot
-stays booked (PRD §16). There is no waiting list: a full slot is simply
-unavailable.
+An admin assigns each paid first-year student a test slot from the admin
+panel/API — there is no student-facing slot list or booking action. The app
+only ever reads its own assignment.
 
-### List available slots
-
-```http
-GET /api/v1/app/test-slots
-Authorization: Bearer <accessToken>
-```
-
-#### Success
-
-Status: `200 OK`
-
-```json
-{
-  "data": {
-    "slots": [
-      {
-        "id": "8f14e...",
-        "startTime": "2026-09-10T09:00:00.000Z",
-        "endTime": "2026-09-10T10:00:00.000Z",
-        "available": true
-      }
-    ]
-  }
-}
-```
-
-| Field | Type | Notes |
-|---|---|---|
-| `slots[].id` | string | pass this as `testSlotId` when booking |
-| `slots[].startTime`, `slots[].endTime` | string (ISO 8601) | |
-| `slots[].available` | boolean | `false` when the slot has no remaining capacity; show it disabled, not hidden |
-
-Only slots that are currently visible and belong to the active recruitment
-cycle are returned. Raw capacity/booked-count numbers are intentionally not
-exposed.
-
-#### Errors
-
-| HTTP | Code | App action |
-|---|---|---|
-| `401` | `UNAUTHORIZED` | Session expired, drop to guest mode |
-| `403` | `APP_ACCESS_DENIED` | Show access-denied state, not session-expired |
-
-### Read my booking
+### Read my assigned slot
 
 ```http
 GET /api/v1/app/test-slot-booking
@@ -735,10 +689,10 @@ Status: `200 OK`
 }
 ```
 
-If the booked slot has since been hidden by an admin, it is still returned
-here — a booked slot's own details always remain visible to the student who
-booked it, even though it would no longer appear in the `GET /test-slots`
-list.
+`bookedAt` is when the admin made (or last changed) the assignment, not
+something the student set. Poll or refresh this on app-resume to pick up a
+new or changed assignment made while the student wasn't looking — it is not
+pushed to the app.
 
 #### Errors
 
@@ -746,36 +700,7 @@ list.
 |---|---|---|
 | `401` | `UNAUTHORIZED` | Session expired, drop to guest mode |
 | `403` | `APP_ACCESS_DENIED` | Show access-denied state, not session-expired |
-| `404` | `TEST_SLOT_NOT_BOOKED` | Show the "no slot booked yet" empty state |
-
-### Book a slot
-
-```http
-POST /api/v1/app/test-slot-booking
-Authorization: Bearer <accessToken>
-Content-Type: application/json
-
-{
-  "testSlotId": "8f14e..."
-}
-```
-
-#### Success
-
-Status: `201 Created`
-
-Same shape as "Read my booking" above.
-
-#### Errors
-
-| HTTP | Code | App action |
-|---|---|---|
-| `400` | `VALIDATION_ERROR` | `testSlotId` missing or not a valid UUID |
-| `401` | `UNAUTHORIZED` | Session expired, drop to guest mode |
-| `403` | `APP_ACCESS_DENIED` | Show access-denied state, not session-expired |
-| `404` | `TEST_SLOT_NOT_FOUND` | Slot list is stale; refresh `GET /test-slots` |
-| `409` | `TEST_SLOT_ALREADY_BOOKED` | Refresh and show the existing booking instead |
-| `409` | `TEST_SLOT_FULL` | Slot filled between list and book; refresh `GET /test-slots` |
+| `404` | `TEST_SLOT_NOT_BOOKED` | Show the "no slot assigned yet" empty state |
 
 ## 15. Android integration requirements
 

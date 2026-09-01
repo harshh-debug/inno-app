@@ -4,7 +4,6 @@ import type {
   AdminTestSlot,
   AdminTestSlotBookingRow,
   AdminTestSlotDetail,
-  AppTestSlot,
   AppTestSlotBooking,
   CreateTestSlotInput,
   TestSlotForBooking,
@@ -21,37 +20,9 @@ export class PrismaTestSlotRepository implements TestSlotRepository {
   findActiveSubmissionForUser = async (userId: string): Promise<ActiveSubmissionForBooking | null> => {
     const submission = await this.prisma.registrationSubmission.findFirst({
       where: { userId, recruitmentCycle: { isActive: true } },
-      select: {
-        id: true,
-        paymentStatus: true,
-        testSlotBooking: { select: { testSlotId: true } },
-      },
+      select: { id: true, paymentStatus: true },
     });
-
-    if (submission === null) {
-      return null;
-    }
-
-    return {
-      id: submission.id,
-      paymentStatus: submission.paymentStatus,
-      bookedTestSlotId: submission.testSlotBooking?.testSlotId ?? null,
-    };
-  };
-
-  listVisibleSlotsForActiveCycle = async (): Promise<AppTestSlot[]> => {
-    const slots = await this.prisma.testSlot.findMany({
-      where: { isVisible: true, recruitmentCycle: { isActive: true } },
-      orderBy: { order: "asc" },
-      select: { id: true, startTime: true, endTime: true, capacity: true, bookedCount: true },
-    });
-
-    return slots.map((slot) => ({
-      id: slot.id,
-      startTime: slot.startTime.toISOString(),
-      endTime: slot.endTime.toISOString(),
-      available: slot.bookedCount < slot.capacity,
-    }));
+    return submission;
   };
 
   findBookingForSubmission = async (submissionId: string): Promise<AppTestSlotBooking | null> => {
@@ -76,10 +47,15 @@ export class PrismaTestSlotRepository implements TestSlotRepository {
     };
   };
 
-  /** Only returns a slot that is visible and belongs to the active recruitment cycle. */
+  /**
+   * Only returns a slot in the active recruitment cycle. `isVisible` isn't
+   * checked here — that flag no longer gates anything now that students
+   * never browse a slot list (admin assigns directly), it only affects the
+   * admin CRUD listing itself.
+   */
   findSlotById = async (testSlotId: string): Promise<TestSlotForBooking | null> => {
     const slot = await this.prisma.testSlot.findFirst({
-      where: { id: testSlotId, isVisible: true, recruitmentCycle: { isActive: true } },
+      where: { id: testSlotId, recruitmentCycle: { isActive: true } },
       select: { id: true, capacity: true },
     });
     return slot;
@@ -104,6 +80,33 @@ export class PrismaTestSlotRepository implements TestSlotRepository {
   createBooking = async (submissionId: string, testSlotId: string): Promise<AppTestSlotBooking> => {
     const booking = await this.prisma.testSlotBooking.create({
       data: { submissionId, testSlotId },
+      select: {
+        testSlotId: true,
+        bookedAt: true,
+        testSlot: { select: { startTime: true, endTime: true } },
+      },
+    });
+
+    return {
+      testSlotId: booking.testSlotId,
+      startTime: booking.testSlot.startTime.toISOString(),
+      endTime: booking.testSlot.endTime.toISOString(),
+      bookedAt: booking.bookedAt.toISOString(),
+    };
+  };
+
+  submissionExists = async (submissionId: string): Promise<boolean> => {
+    const submission = await this.prisma.registrationSubmission.findUnique({
+      where: { id: submissionId },
+      select: { id: true },
+    });
+    return submission !== null;
+  };
+
+  reassignBooking = async (submissionId: string, testSlotId: string): Promise<AppTestSlotBooking> => {
+    const booking = await this.prisma.testSlotBooking.update({
+      where: { submissionId },
+      data: { testSlotId, bookedAt: new Date() },
       select: {
         testSlotId: true,
         bookedAt: true,

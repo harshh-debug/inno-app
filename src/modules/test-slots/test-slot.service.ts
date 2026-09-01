@@ -1,11 +1,9 @@
 import { AppError } from "../../common/errors.js";
-import { isPrismaUniqueConstraintError } from "../../common/prisma-errors.js";
 import { PaymentStatus } from "../../../generated/prisma/client.js";
 import type {
   ActiveSubmissionForBooking,
   AdminTestSlot,
   AdminTestSlotBookingRow,
-  AppTestSlot,
   AppTestSlotBooking,
   CreateTestSlotInput,
   TestSlotRepository,
@@ -14,17 +12,15 @@ import type {
 
 type TransactionRunner = <T>(operation: (repository: TestSlotRepository) => Promise<T>) => Promise<T>;
 
-/** Module 7 — student-facing test-slot listing and booking (PRD §16). */
+/**
+ * Module 7 — test-slot scheduling. Admin assigns a submission to a slot;
+ * the student only ever reads their own assignment (no self-booking).
+ */
 export class TestSlotService {
   constructor(
     private readonly repository: TestSlotRepository,
     private readonly transaction: TransactionRunner,
   ) {}
-
-  async listAvailableSlots(userId: string): Promise<AppTestSlot[]> {
-    await this.requirePaidActiveSubmission(userId);
-    return this.repository.listVisibleSlotsForActiveCycle();
-  }
 
   async getMyBooking(userId: string): Promise<AppTestSlotBooking> {
     const submission = await this.requirePaidActiveSubmission(userId);
@@ -35,38 +31,40 @@ export class TestSlotService {
     return booking;
   }
 
-  async bookSlot(userId: string, testSlotId: string): Promise<AppTestSlotBooking> {
-    try {
-      return await this.transaction(async (repository) => {
-        const submission = await this.requirePaidActiveSubmission(userId, repository);
-
-        if (submission.bookedTestSlotId !== null) {
-          throw new AppError("TEST_SLOT_ALREADY_BOOKED", 409, "A test slot is already booked");
-        }
-
-        const slot = await repository.findSlotById(testSlotId);
-        if (slot === null) {
-          throw new AppError("TEST_SLOT_NOT_FOUND", 404, "Test slot not found");
-        }
-
-        const reserved = await repository.tryReserveSeat(testSlotId, slot.capacity);
-        if (!reserved) {
-          throw new AppError("TEST_SLOT_FULL", 409, "Test slot has no remaining capacity");
-        }
-
-        try {
-          return await repository.createBooking(submission.id, testSlotId);
-        } catch (error) {
-          await repository.releaseSeat(testSlotId);
-          throw error;
-        }
-      });
-    } catch (error) {
-      if (isPrismaUniqueConstraintError(error)) {
-        throw new AppError("TEST_SLOT_ALREADY_BOOKED", 409, "A test slot is already booked");
+  /**
+   * Admin assigns (or reassigns) a submission to a slot. Reserves the new
+   * seat before touching any existing booking, so a full slot fails before
+   * anything changes; the whole thing runs in one transaction, so a failure
+   * partway through rolls back cleanly with no manual compensation needed.
+   */
+  async assignSlot(submissionId: string, testSlotId: string): Promise<AppTestSlotBooking> {
+    return this.transaction(async (repository) => {
+      if (!(await repository.submissionExists(submissionId))) {
+        throw new AppError("REGISTRATION_SUBMISSION_NOT_FOUND", 404, "Registration submission not found");
       }
-      throw error;
-    }
+
+      const slot = await repository.findSlotById(testSlotId);
+      if (slot === null) {
+        throw new AppError("TEST_SLOT_NOT_FOUND", 404, "Test slot not found");
+      }
+
+      const existingBooking = await repository.findBookingForSubmission(submissionId);
+      if (existingBooking !== null && existingBooking.testSlotId === testSlotId) {
+        return existingBooking;
+      }
+
+      const reserved = await repository.tryReserveSeat(testSlotId, slot.capacity);
+      if (!reserved) {
+        throw new AppError("TEST_SLOT_FULL", 409, "Test slot has no remaining capacity");
+      }
+
+      if (existingBooking !== null) {
+        await repository.releaseSeat(existingBooking.testSlotId);
+        return repository.reassignBooking(submissionId, testSlotId);
+      }
+
+      return repository.createBooking(submissionId, testSlotId);
+    });
   }
 
   async listSlotsForCycle(cycleId: string): Promise<AdminTestSlot[]> {
@@ -165,11 +163,8 @@ export class TestSlotService {
     }
   }
 
-  private async requirePaidActiveSubmission(
-    userId: string,
-    repository: TestSlotRepository = this.repository,
-  ): Promise<ActiveSubmissionForBooking> {
-    const submission = await repository.findActiveSubmissionForUser(userId);
+  private async requirePaidActiveSubmission(userId: string): Promise<ActiveSubmissionForBooking> {
+    const submission = await this.repository.findActiveSubmissionForUser(userId);
     // requireAppStudent already confirmed a paid active-cycle registration
     // exists, so reaching either branch below means a race with that check
     // (e.g. an admin flipped payment/cycle state in between).

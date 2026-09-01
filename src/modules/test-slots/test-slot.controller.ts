@@ -2,7 +2,7 @@ import type { Request, Response } from "express";
 import { AppError } from "../../common/errors.js";
 import type { AuthenticatedRequest } from "../authentication/auth.middleware.js";
 import type {
-  BookTestSlotRequest,
+  AssignTestSlotRequest,
   CreateTestSlotRequest,
   ReorderTestSlotsRequest,
   UpdateTestSlotRequest,
@@ -12,13 +12,6 @@ import type { TestSlotService } from "./test-slot.service.js";
 export class TestSlotController {
   constructor(private readonly service: TestSlotService) {}
 
-  listSlots = async (request: AuthenticatedRequest, response: Response): Promise<void> => {
-    if (request.auth === undefined) {
-      throw new AppError("UNAUTHORIZED", 401, "A bearer token is required");
-    }
-    response.json({ data: { slots: await this.service.listAvailableSlots(request.auth.userId) } });
-  };
-
   getMyBooking = async (request: AuthenticatedRequest, response: Response): Promise<void> => {
     if (request.auth === undefined) {
       throw new AppError("UNAUTHORIZED", 401, "A bearer token is required");
@@ -26,12 +19,10 @@ export class TestSlotController {
     response.json({ data: await this.service.getMyBooking(request.auth.userId) });
   };
 
-  bookSlot = async (request: AuthenticatedRequest, response: Response): Promise<void> => {
-    if (request.auth === undefined) {
-      throw new AppError("UNAUTHORIZED", 401, "A bearer token is required");
-    }
-    const { testSlotId } = request.body as BookTestSlotRequest;
-    response.status(201).json({ data: await this.service.bookSlot(request.auth.userId, testSlotId) });
+  assignSlot = async (request: Request, response: Response): Promise<void> => {
+    const { registrationId } = request.params as { registrationId: string };
+    const { testSlotId } = request.body as AssignTestSlotRequest;
+    response.json({ data: await this.service.assignSlot(registrationId, testSlotId) });
   };
 
   listSlotsForCycle = async (request: Request, response: Response): Promise<void> => {
