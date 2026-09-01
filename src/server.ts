@@ -8,6 +8,7 @@ import { createRecruitmentCyclesModule } from "./modules/recruitment-cycles/recr
 import { createRegistrationsModule } from "./modules/registrations/registrations.module.js";
 import { createAppProfileModule } from "./modules/app-profile/index.js";
 import { createTestSlotModule } from "./modules/test-slots/index.js";
+import { createInterviewSlotModule } from "./modules/interview-slots/index.js";
 
 const environment = loadEnvironment();
 const prisma = createPrismaClient(environment);
@@ -23,6 +24,7 @@ const registrationsModule = createRegistrationsModule(
 );
 const appProfileModule = createAppProfileModule(prisma);
 const testSlotModule = createTestSlotModule(prisma);
+const interviewSlotModule = createInterviewSlotModule(prisma);
 
 const app = createApp(
   prisma,
@@ -36,6 +38,7 @@ const app = createApp(
   { controller: appProfileModule.controller },
   { controller: testSlotModule.controller },
   { controller: usersModule.controller },
+  { controller: interviewSlotModule.controller },
 );
 
 const server = app.listen(environment.PORT, () => {

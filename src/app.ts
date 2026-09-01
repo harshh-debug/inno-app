@@ -11,6 +11,7 @@ import {
   type RegistrationsRouterDependencies,
   type TestSlotsRouterDependencies,
   type UsersRouterDependencies,
+  type InterviewSlotsRouterDependencies,
 } from "./common/http/api-v1.router.js";
 import { errorHandler, notFoundHandler } from "./common/http/error.middleware.js";
 
@@ -22,6 +23,7 @@ export function createApp(
   appProfile?: AppProfileRouterDependencies,
   testSlots?: TestSlotsRouterDependencies,
   users?: UsersRouterDependencies,
+  interviewSlots?: InterviewSlotsRouterDependencies,
 ): Express {
   const app = express();
   const healthService = new HealthService(prisma);
@@ -32,7 +34,15 @@ export function createApp(
   app.use(createHealthRouter(healthController));
   app.use(
     "/api/v1",
-    createApiV1Router(authentication, recruitmentCycles, registrations, appProfile, testSlots, users),
+    createApiV1Router(
+      authentication,
+      recruitmentCycles,
+      registrations,
+      appProfile,
+      testSlots,
+      users,
+      interviewSlots,
+    ),
   );
   app.use(notFoundHandler);
   app.use(errorHandler);
