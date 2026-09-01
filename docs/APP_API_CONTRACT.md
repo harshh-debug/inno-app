@@ -22,6 +22,7 @@ panel endpoints, or planned backend modules.
 | `POST /auth/password-reset/complete` | Set a new password using the reset token and issue an access token | Reset token in body |
 | `POST /auth/logout` | Revoke the current access token | Bearer token |
 | `GET /me` | Read the authenticated student's profile | Bearer token |
+| `PATCH /me` | Update the authenticated student's editable profile fields (`fullName`, `phone`) | Bearer token |
 | `GET /recruitment` | Read the authenticated student's payment, decision, and test-slot status | Bearer token |
 
 There is no app signup or app registration endpoint. A student must already
@@ -571,6 +572,37 @@ for a follow-up contract version if that data ever gets collected.
 
 | HTTP | Code | App action |
 |---|---|---|
+| `401` | `UNAUTHORIZED` | Session expired, drop to guest mode |
+| `403` | `APP_ACCESS_DENIED` | Show access-denied state, not session-expired |
+
+### Update profile
+
+```http
+PATCH /api/v1/app/me
+Authorization: Bearer <accessToken>
+Content-Type: application/json
+
+{
+  "fullName": "Student Name",
+  "phone": "9999999999"
+}
+```
+
+Both fields are optional but at least one must be present (partial update).
+Only `fullName` and `phone` are editable — `collegeEmail` is the immutable
+login identity, and `batch`/`year`/`role` are admin-panel-only: the club only
+recruits first-years, so those fields describe the student's registration
+record, not something they self-report.
+
+Response shape is identical to `GET /me` (`200 OK`, same envelope and field
+set) reflecting the values just written, so the client can replace its local
+copy directly instead of re-fetching.
+
+### Errors
+
+| HTTP | Code | App action |
+|---|---|---|
+| `400` | `VALIDATION_ERROR` | Show the field error (e.g. empty string, over length limit) |
 | `401` | `UNAUTHORIZED` | Session expired, drop to guest mode |
 | `403` | `APP_ACCESS_DENIED` | Show access-denied state, not session-expired |
 

@@ -1,5 +1,5 @@
 import { AppError } from "../../common/errors.js";
-import type { AppProfile, AppProfileRepository, AppRecruitmentSummary } from "./app-profile.types.js";
+import type { AppProfile, AppProfileRepository, AppProfileUpdate, AppRecruitmentSummary } from "./app-profile.types.js";
 
 export class AppProfileService {
   constructor(private readonly repository: AppProfileRepository) {}
@@ -10,6 +10,10 @@ export class AppProfileService {
       throw new AppError("USER_NOT_FOUND", 404, "User not found");
     }
     return profile;
+  }
+
+  async updateProfile(userId: string, input: AppProfileUpdate): Promise<AppProfile> {
+    return this.repository.updateProfile(userId, input);
   }
 
   async getRecruitmentSummary(userId: string): Promise<AppRecruitmentSummary> {
