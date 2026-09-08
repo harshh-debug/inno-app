@@ -5,7 +5,11 @@ import type { AccountDeletionPurgeRepository } from "./account-deletion-purge.re
 export interface PurgeRunResult {
   anonymizedAccounts: number;
   sweptTokens: number;
+  sweptEmailJobs: number;
 }
+
+// Failed email jobs are terminal, so this is retention, not correctness.
+const FAILED_EMAIL_JOB_RETENTION_DAYS = 7;
 
 export class AccountDeletionPurgeService {
   constructor(
@@ -14,16 +18,24 @@ export class AccountDeletionPurgeService {
   ) {}
 
   /**
-   * Everything the scheduled purge does. The revoked-token sweep rides along
-   * here because Postgres has no per-row TTL and this is the only recurring
-   * job in the API process — it is housekeeping, not correctness, so it is
-   * safe for it to run late or be skipped (see TokenDenylist).
+   * Everything the scheduled purge does. The revoked-token and failed-email-job
+   * sweeps ride along here because Postgres has no per-row TTL and this is the
+   * only recurring job in the API process — it is housekeeping, not
+   * correctness, so it is safe for it to run late or be skipped (see
+   * TokenDenylist).
    */
   async run(now: Date = new Date()): Promise<PurgeRunResult> {
     return {
       anonymizedAccounts: await this.purgeDueAccounts(now),
       sweptTokens: await this.denylist.deleteExpired(now),
+      sweptEmailJobs: await this.sweepFailedEmailJobs(now),
     };
+  }
+
+  async sweepFailedEmailJobs(now: Date = new Date()): Promise<number> {
+    const cutoff = new Date(now.getTime() - FAILED_EMAIL_JOB_RETENTION_DAYS * 24 * 60 * 60 * 1_000);
+    const { count } = await this.repository.deleteFailedEmailJobs(cutoff);
+    return count;
   }
 
   async purgeDueAccounts(now: Date = new Date()): Promise<number> {

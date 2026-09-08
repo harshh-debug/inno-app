@@ -40,13 +40,17 @@ All admin endpoints require server-side `ADMIN` authorization. Public and app cl
 
 ## Email Worker
 
-The backend owns all eligibility decisions and sends complete email payloads to BullMQ. The separate worker process only sends those payloads through SMTP.
+The backend owns all eligibility decisions and writes complete email payloads to the `email_jobs` table. The separate worker process claims those rows and sends them through SMTP.
+
+The queue is PostgreSQL, not a broker. Jobs are claimed with `SELECT ... FOR UPDATE SKIP LOCKED`, retried with exponential backoff, and deleted on success. Polling is deliberate — `LISTEN/NOTIFY` is fire-and-forget, so a job enqueued while the worker restarts would never be delivered.
 
 The worker must not:
 
-- Access PostgreSQL or Prisma.
+- Read or write any table other than `email_jobs`.
 - Decide whether an email should be sent.
 - Change payment, authentication, registration, or recruitment state.
+
+A delivered job is deleted rather than marked sent, which keeps the plaintext code in `payload` only while delivery is pending and holds to the rule against storing email delivery state.
 
 Phase 1 uses only two email job types:
 
