@@ -59,6 +59,7 @@ enum VerificationCodePurpose {
   // This is not an activation code.
   EMAIL_VERIFICATION
   PASSWORD_RESET  // future: forgot-password flow
+  ACCOUNT_DELETION  // public web deletion page — link-based, no code entry step
 }
 
 enum TimelineEventType {
@@ -80,6 +81,12 @@ model User {
   emailVerifiedAt DateTime?    @map("email_verified_at") @db.Timestamptz(3)
   role            PlatformRole @default(REGISTERED)
   isSuspended     Boolean      @default(false) @map("is_suspended")
+  // Set when the app-side deletion-request endpoint is hit; cleared on cancel or login-triggered restore.
+  // A purge job anonymizes rows older than the grace period (see PurgeAccountDeletions).
+  deletionRequestedAt DateTime? @map("deletion_requested_at") @db.Timestamptz(3)
+  // Set once the purge job anonymizes this row. deletionRequestedAt is left untouched afterward as a
+  // historical record, so this is the field that actually marks "already purged" (prevents reprocessing).
+  anonymizedAt DateTime? @map("anonymized_at") @db.Timestamptz(3)
   // Null until an admin promotes past REGISTERED; cleared back to null on
   // demotion to REGISTERED. Enforced in UserService, not at the DB level.
   domain          Domain?      @map("domain")

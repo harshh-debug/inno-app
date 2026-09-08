@@ -1,9 +1,21 @@
 import { Prisma } from "../../../generated/prisma/client.js";
 import { AppError } from "../../common/errors.js";
-import type { AppProfile, AppProfileRepository, AppProfileUpdate, AppRecruitmentSummary } from "./app-profile.types.js";
+import type { TokenDenylist } from "../authentication/token-denylist.js";
+import type { VerifiedAccessTokenClaims } from "../authentication/token.js";
+import { scheduledDeletionDate } from "./account-deletion.constants.js";
+import type {
+  AccountDeletionRequest,
+  AppProfile,
+  AppProfileRepository,
+  AppProfileUpdate,
+  AppRecruitmentSummary,
+} from "./app-profile.types.js";
 
 export class AppProfileService {
-  constructor(private readonly repository: AppProfileRepository) {}
+  constructor(
+    private readonly repository: AppProfileRepository,
+    private readonly denylist?: TokenDenylist,
+  ) {}
 
   async getProfile(userId: string): Promise<AppProfile> {
     const profile = await this.repository.findProfileByUserId(userId);
@@ -24,6 +36,26 @@ export class AppProfileService {
       }
       throw error;
     }
+  }
+
+  // Sets deletionRequestedAt and revokes the token that made this call, in the
+  // same request — the button press must actually start deletion, not just
+  // message someone (Play policy). Mirrors AuthService.logout's revoke call.
+  async requestDeletion(userId: string, claims: VerifiedAccessTokenClaims): Promise<AccountDeletionRequest> {
+    const requestedAt = await this.repository.requestDeletion(userId);
+    if (this.denylist !== undefined) {
+      await this.denylist.revoke(claims.jti, claims.expiresAt);
+    }
+    return {
+      deletionRequestedAt: requestedAt.toISOString(),
+      scheduledFor: scheduledDeletionDate(requestedAt).toISOString(),
+    };
+  }
+
+  // Cancel path — the caller had to log back in to reach this (their prior
+  // token was revoked by requestDeletion), which is the extra confirmation step.
+  async cancelDeletion(userId: string): Promise<void> {
+    await this.repository.cancelDeletion(userId);
   }
 
   async getRecruitmentSummary(userId: string): Promise<AppRecruitmentSummary> {

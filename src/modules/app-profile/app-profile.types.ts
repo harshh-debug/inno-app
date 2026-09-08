@@ -42,8 +42,16 @@ export interface AppProfileUpdate {
   phone?: string;
 }
 
+// POST /app/me/deletion-request response.
+export interface AccountDeletionRequest {
+  deletionRequestedAt: string;
+  scheduledFor: string;
+}
+
 export interface AppProfileRepository {
   findProfileByUserId(userId: string): Promise<AppProfile | null>;
   findRecruitmentSummaryByUserId(userId: string): Promise<AppRecruitmentSummary | null>;
   updateProfile(userId: string, input: AppProfileUpdate): Promise<AppProfile>;
+  requestDeletion(userId: string): Promise<Date>;
+  cancelDeletion(userId: string): Promise<void>;
 }

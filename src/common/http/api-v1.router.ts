@@ -123,7 +123,7 @@ export function createApiV1Router(
     }
 
     if (appProfile !== undefined) {
-      appRouter.use(createAppProfileRouter(appProfile.controller, appStudentGuard));
+      appRouter.use(createAppProfileRouter(appProfile.controller, appStudentGuard, [bearerGuard]));
     }
 
     if (testSlots !== undefined) {
