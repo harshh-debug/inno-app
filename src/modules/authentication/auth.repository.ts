@@ -21,18 +21,25 @@ export class AuthRepository {
     return this.prisma.user.findUnique({ where: { id: userId } });
   }
 
+  // BUG FIX: this used to filter role: REGISTERED unconditionally, which locked a student
+  // out of the entire /app namespace — including GET /me — the moment they got promoted to
+  // MEMBER/COORDINATOR. That contradicted the app contract's own GET /me docs, which describe
+  // `role`/`domain` reflecting a promotion. REGISTERED still needs the current recruitment
+  // check (paid, active cycle) since that's what "eligible applicant" means; MEMBER/COORDINATOR
+  // don't re-prove that every cycle — they already cleared it once to get promoted, and an old
+  // cycle flipping isActive=false shouldn't retroactively lock out an existing club member.
   findEligibleStudentByNormalizedEmail(normalizedEmail: string): Promise<User | null> {
     return this.prisma.user.findFirst({
       where: {
         normalizedEmail,
-        role: PlatformRole.REGISTERED,
         isSuspended: false,
-        registrations: {
-          some: {
-            paymentStatus: PaymentStatus.PAID,
-            recruitmentCycle: { isActive: true },
+        OR: [
+          {
+            role: PlatformRole.REGISTERED,
+            registrations: { some: { paymentStatus: PaymentStatus.PAID, recruitmentCycle: { isActive: true } } },
           },
-        },
+          { role: { in: [PlatformRole.MEMBER, PlatformRole.COORDINATOR] } },
+        ],
       },
     });
   }
@@ -41,14 +48,14 @@ export class AuthRepository {
     return this.prisma.user.findFirst({
       where: {
         id: userId,
-        role: PlatformRole.REGISTERED,
         isSuspended: false,
-        registrations: {
-          some: {
-            paymentStatus: PaymentStatus.PAID,
-            recruitmentCycle: { isActive: true },
+        OR: [
+          {
+            role: PlatformRole.REGISTERED,
+            registrations: { some: { paymentStatus: PaymentStatus.PAID, recruitmentCycle: { isActive: true } } },
           },
-        },
+          { role: { in: [PlatformRole.MEMBER, PlatformRole.COORDINATOR] } },
+        ],
       },
     });
   }
