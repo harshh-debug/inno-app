@@ -563,7 +563,7 @@ Status: `200 OK`
 | `phone` | string \| null | captured at registration |
 | `batch` | string \| null | free-text as captured at registration (e.g. "CSE 2024-2028"); not a structured branch/section field |
 | `year` | number \| null | captured at registration |
-| `role` | string | one of `REGISTERED`, `MEMBER`, `COORDINATOR`, `ADMIN` (an admin account can technically reach `/app` endpoints too, but Phase 1's onboarding/registration flow only ever produces `REGISTERED`) |
+| `role` | string | one of `REGISTERED`, `MEMBER`, `COORDINATOR`. Fixed 2026-09: eligibility used to filter on `role: REGISTERED` unconditionally, which locked a student out of the entire `/app` namespace — including this endpoint — the instant they got promoted; a promoted `MEMBER`/`COORDINATOR` is now eligible without re-proving a current-cycle paid registration, since they already cleared that to get promoted. `ADMIN` is still excluded — admins use the separate admin panel, not this app. |
 | `domain` | string \| null | one of `ANDROID`, `WEB`, `ML`, `IOT`, `AR_VR`, or `null`. Always `null` for `REGISTERED`; set by an admin when promoting to `MEMBER`/`COORDINATOR` (optional for `ADMIN`). Not embedded in the access token — always read fresh here, so re-fetch on splash/app-resume to pick up a promotion made mid-session. |
 
 `enrollmentNumber`, `branch`, `section`, `semester`, and `CGPA` are **not**
