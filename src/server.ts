@@ -7,6 +7,8 @@ import { createUsersModule } from "./modules/users/users.module.js";
 import { createRecruitmentCyclesModule } from "./modules/recruitment-cycles/recruitment-cycles.module.js";
 import { createRegistrationsModule } from "./modules/registrations/registrations.module.js";
 import { createAppProfileModule } from "./modules/app-profile/index.js";
+import { createAccountDeletionPurgeModule } from "./modules/account-deletion-purge/index.js";
+import { createPublicAccountDeletionModule } from "./modules/public-account-deletion/index.js";
 import { createTestSlotModule } from "./modules/test-slots/index.js";
 import { createInterviewSlotModule } from "./modules/interview-slots/index.js";
 
@@ -22,7 +24,14 @@ const registrationsModule = createRegistrationsModule(
   usersModule,
   notificationsModule.notificationService,
 );
-const appProfileModule = createAppProfileModule(prisma);
+const appProfileModule = createAppProfileModule(prisma, authenticationModule.denylist);
+const accountDeletionPurgeModule = await createAccountDeletionPurgeModule(prisma, environment.REDIS_URL);
+const publicAccountDeletionModule = createPublicAccountDeletionModule(
+  prisma,
+  notificationsModule.notificationService,
+  environment.VERIFICATION_HASH_SECRET,
+  environment.APP_URL,
+);
 const testSlotModule = createTestSlotModule(prisma);
 const interviewSlotModule = createInterviewSlotModule(prisma);
 
@@ -39,6 +48,7 @@ const app = createApp(
   { controller: testSlotModule.controller },
   { controller: usersModule.controller },
   { controller: interviewSlotModule.controller },
+  { controller: publicAccountDeletionModule.controller },
 );
 
 const server = app.listen(environment.PORT, () => {
@@ -50,6 +60,8 @@ async function shutdown(signal: string): Promise<void> {
   server.close(async () => {
     await notificationsModule.emailQueue.close();
     await authenticationModule.denylist.close();
+    await accountDeletionPurgeModule.worker.close();
+    await accountDeletionPurgeModule.queue.close();
     await prisma.$disconnect();
     process.exit(0);
   });

@@ -1,7 +1,7 @@
 # Innogeeks Android App API Contract
 
-Contract version: `0.6.0`  
-Last updated: `2026-09-01`  
+Contract version: `0.7.0`  
+Last updated: `2026-09-08`  
 API namespace: `/api/v1/app`
 
 This document contains only Android app endpoints that are currently
@@ -26,9 +26,17 @@ panel endpoints, or planned backend modules.
 | `GET /recruitment` | Read the authenticated student's payment, decision, test-slot, and interview status | Bearer token |
 | `GET /test-slot-booking` | Read the student's own admin-assigned test slot | Bearer token |
 | `GET /interview-booking` | Read the student's own admin-assigned interview slot | Bearer token |
+| `POST /me/deletion-request` | Request account deletion (starts a 14-day grace period, revokes the current token) | Bearer token |
+| `DELETE /me/deletion-request` | Cancel a pending deletion request | Bearer token |
 
 There is no app signup or app registration endpoint. A student must already
 have a paid registration created through the public registration flow.
+
+This backend also serves two plain HTML pages outside this JSON contract, at
+the server root rather than under `/api/v1`: `GET /delete-account` (the public
+web deletion page required by Play policy) and `GET /privacy` (the privacy
+policy). Android does not call these directly; they exist for a browser and
+for the Play Console Data Safety form's deletion-URL field.
 
 ## 2. Common contract
 
@@ -361,7 +369,8 @@ Status: `200 OK`
 ```json
 {
   "data": {
-    "accessToken": "access-jwt"
+    "accessToken": "access-jwt",
+    "deletionScheduledFor": null
   }
 }
 ```
@@ -369,6 +378,14 @@ Status: `200 OK`
 Store the access token in secure credential storage. The backend rechecks that
 the active-cycle registration is paid and the user is not suspended on every
 login.
+
+`deletionScheduledFor` is `null` on every normal login. It is a non-null ISO
+8601 date only when this account has a pending deletion request (see §16) —
+login itself is deliberately **not** blocked in that case, specifically so the
+app can still obtain a token and route to a "cancel deletion" screen instead
+of home. Every other `/app` endpoint (§12–§15) rejects that same token with
+`403 ACCOUNT_PENDING_DELETION` (§9) — only login and the deletion-request
+endpoints themselves (§16) work normally during the grace period.
 
 ### Errors
 
@@ -392,11 +409,18 @@ just at login, and the app must handle them differently:
   as `401`; this is a different situation and should say something like
   "Your account no longer has app access" rather than implying the student
   should just log back in.
+- **`403 ACCOUNT_PENDING_DELETION`** — the token is valid, but this account
+  has a pending deletion request (§16). Every `/app` route except `POST` and
+  `DELETE /me/deletion-request` returns this instead of normal data. Route the
+  app to the "your account will be deleted on \<date\>, cancel?" screen, not
+  the generic access-denied message used for `APP_ACCESS_DENIED` — this is a
+  self-inflicted, reversible state, not an eligibility problem.
 
-Every authenticated endpoint in this contract rechecks suspension and
-active-cycle-paid-registration on every call, not only at login. A student
-who loses eligibility mid-session gets `403` on their very next authenticated
-request, not after some longer window.
+Every authenticated endpoint in this contract rechecks suspension,
+active-cycle-paid-registration, and pending-deletion status on every call, not
+only at login. A student who loses eligibility (or requests deletion)
+mid-session gets `403` on their very next authenticated request, not after
+some longer window.
 
 There is no refresh-token endpoint. A 7-day re-login cadence is expected
 product behavior.
@@ -577,6 +601,7 @@ version if that data ever gets collected.
 |---|---|---|
 | `401` | `UNAUTHORIZED` | Session expired, drop to guest mode |
 | `403` | `APP_ACCESS_DENIED` | Show access-denied state, not session-expired |
+| `403` | `ACCOUNT_PENDING_DELETION` | Route to the pending-deletion/cancel screen (§9, §16), not the access-denied state |
 
 ### Update profile
 
@@ -614,6 +639,7 @@ copy directly instead of re-fetching.
 | `400` | `VALIDATION_ERROR` | Show the field error (e.g. empty string, over length limit, phone not 7-15 digits, neither field present) |
 | `401` | `UNAUTHORIZED` | Session expired, drop to guest mode |
 | `403` | `APP_ACCESS_DENIED` | Show access-denied state, not session-expired |
+| `403` | `ACCOUNT_PENDING_DELETION` | Route to the pending-deletion/cancel screen (§9, §16), not the access-denied state |
 | `404` | `USER_NOT_FOUND` | Treat as session-invalid; drop to guest mode (rare race: account removed between requests) |
 
 ## 13. Recruitment status
@@ -671,6 +697,7 @@ assigns both (§14, §15); this endpoint only reads the current state.
 |---|---|---|
 | `401` | `UNAUTHORIZED` | Session expired, drop to guest mode |
 | `403` | `APP_ACCESS_DENIED` | Show access-denied state, not session-expired |
+| `403` | `ACCOUNT_PENDING_DELETION` | Route to the pending-deletion/cancel screen (§9, §16), not the access-denied state |
 
 ## 14. Test-slot booking
 
@@ -711,6 +738,7 @@ pushed to the app.
 |---|---|---|
 | `401` | `UNAUTHORIZED` | Session expired, drop to guest mode |
 | `403` | `APP_ACCESS_DENIED` | Show access-denied state, not session-expired |
+| `403` | `ACCOUNT_PENDING_DELETION` | Route to the pending-deletion/cancel screen (§9, §16), not the access-denied state |
 | `404` | `TEST_SLOT_NOT_BOOKED` | Show the "no slot assigned yet" empty state |
 
 ## 15. Interview scheduling
@@ -753,9 +781,104 @@ refresh this on app-resume, same as §14.
 |---|---|---|
 | `401` | `UNAUTHORIZED` | Session expired, drop to guest mode |
 | `403` | `APP_ACCESS_DENIED` | Show access-denied state, not session-expired |
+| `403` | `ACCOUNT_PENDING_DELETION` | Route to the pending-deletion/cancel screen (§9, §16), not the access-denied state |
 | `404` | `INTERVIEW_SLOT_NOT_BOOKED` | Show the "no interview assigned yet" empty state |
 
-## 16. Android integration requirements
+## 16. Account deletion
+
+Google Play requires that any app allowing account creation also let users
+delete that account, both in-app and via a public web page. This is a
+request-based flow with a disclosed 14-day grace period, not instant
+self-service deletion — but the button press must functionally start
+deletion in the same request, not just message someone. It does:
+`POST /me/deletion-request` stamps `deletionRequestedAt` and revokes the
+calling token synchronously, with no human-in-the-loop step before deletion
+actually begins.
+
+The confirmation dialog shown before the student confirms must state the
+grace period and what happens to their data in plain language at the moment
+of the request — this is a policy requirement, not just a nice-to-have; do
+not rely on the privacy policy alone to carry this disclosure.
+
+### 16.1 Request deletion
+
+```http
+POST /api/v1/app/me/deletion-request
+Authorization: Bearer <accessToken>
+```
+
+No request body.
+
+#### Success
+
+Status: `200 OK`
+
+```json
+{
+  "data": {
+    "deletionRequestedAt": "2026-09-08T06:39:45.022Z",
+    "scheduledFor": "2026-09-22T06:39:45.022Z"
+  }
+}
+```
+
+The presented access token is revoked in this same call — any further
+request with it returns `401 UNAUTHORIZED`, same as logout. The app should
+treat a successful response exactly like logout (clear the local token, drop
+to guest mode) and separately show the student `scheduledFor` so they know
+when deletion becomes permanent.
+
+#### Errors
+
+| HTTP | Code | App action |
+|---|---|---|
+| `401` | `UNAUTHORIZED` | Session expired, drop to guest mode |
+| `403` | `APP_ACCESS_DENIED` | Show access-denied state, not session-expired |
+| `403` | `ACCOUNT_PENDING_DELETION` | Already pending — treat as already-requested, not an error |
+
+### 16.2 Cancel a pending deletion
+
+```http
+DELETE /api/v1/app/me/deletion-request
+Authorization: Bearer <accessToken>
+```
+
+Runs behind a lighter guard than every other `/app` route: only a valid,
+non-revoked token is required, **not** normal eligibility — a pending-deletion
+account fails the normal eligibility check by design (§9), so cancelling
+needs to work precisely in the state every other endpoint rejects. Reaching
+this call requires logging back in first (§8's `deletionScheduledFor`), since
+the token from the original request was revoked in 16.1 — that re-login is
+the intended extra confirmation step, not an oversight.
+
+#### Success
+
+Status: `200 OK`
+
+```json
+{ "data": { "cancelled": true } }
+```
+
+After this, the account is fully restored — the very next login returns
+`deletionScheduledFor: null` and every other `/app` endpoint works normally
+again.
+
+#### Errors
+
+| HTTP | Code | App action |
+|---|---|---|
+| `401` | `UNAUTHORIZED` | Session expired, drop to guest mode |
+
+### 16.3 Web deletion page
+
+`GET /delete-account` (outside `/api/v1`, plain HTML — see §1) lets anyone
+request deletion without the app installed, by entering their college email.
+It emails a confirmation link (`GET /delete-account/confirm`); clicking it
+applies the same `deletionRequestedAt` stamp and grace period as 16.1. The
+Android app does not call this page or its backing form directly — it exists
+for a browser and for the Play Console Data Safety form's deletion-URL field.
+
+## 17. Android integration requirements
 
 - Store access tokens in secure credential storage.
 - Never log access tokens, password-setup tokens, password-reset tokens,
@@ -769,8 +892,12 @@ refresh this on app-resume, same as §14.
 - Do not add app signup or app registration screens in Phase 1.
 - Always clear the locally stored token on logout, independent of whether the
   `POST /auth/logout` call succeeds.
+- Treat a successful `POST /me/deletion-request` like logout for local
+  state (clear the token, drop to guest mode), and require the student to
+  type an exact confirmation phrase before enabling the confirm button —
+  this is a destructive, policy-sensitive action, not a routine one.
 
-## 17. Contract change policy
+## 18. Contract change policy
 
 - This file documents implemented Android app endpoints only.
 - Add a new endpoint only after its backend module and manual end-to-end gate
