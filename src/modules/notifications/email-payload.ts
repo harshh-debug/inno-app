@@ -1,4 +1,9 @@
-export const EMAIL_JOB_TYPES = ["REGISTRATION_SUCCESS", "EMAIL_VERIFICATION", "PASSWORD_RESET"] as const;
+export const EMAIL_JOB_TYPES = [
+  "REGISTRATION_SUCCESS",
+  "EMAIL_VERIFICATION",
+  "PASSWORD_RESET",
+  "ACCOUNT_DELETION_LINK",
+] as const;
 
 export type EmailJobType = (typeof EMAIL_JOB_TYPES)[number];
 
@@ -32,6 +37,31 @@ export interface PasswordResetEmailInput {
   to: string;
   code: string;
   expiresInMinutes: number;
+}
+
+// Public web deletion page — the link goes straight to the confirm step, no
+// code entry, since there's no app UI here to type a code into.
+export interface AccountDeletionLinkEmailInput {
+  to: string;
+  confirmUrl: string;
+  expiresInMinutes: number;
+}
+
+export function buildAccountDeletionLinkEmail(input: AccountDeletionLinkEmailInput): EmailPayload {
+  return {
+    to: input.to,
+    subject: "Confirm your Innogeeks account deletion request",
+    text: [
+      "We received a request to delete your Innogeeks account from the web.",
+      `Confirm it here: ${input.confirmUrl}`,
+      `This link expires in ${input.expiresInMinutes} minutes. If you did not request this, you can ignore this email — no changes will be made.`,
+    ].join("\n\n"),
+    html: [
+      "<p>We received a request to delete your Innogeeks account from the web.</p>",
+      `<p><a href=\"${escapeHtmlAttribute(input.confirmUrl)}\">Confirm account deletion</a></p>`,
+      `<p>This link expires in ${input.expiresInMinutes} minutes. If you did not request this, you can ignore this email — no changes will be made.</p>`,
+    ].join(""),
+  };
 }
 
 export function buildRegistrationSuccessEmail(input: RegistrationSuccessEmailInput): EmailPayload {

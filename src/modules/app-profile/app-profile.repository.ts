@@ -42,6 +42,24 @@ export class PrismaAppProfileRepository implements AppProfileRepository {
     });
   }
 
+  async requestDeletion(userId: string): Promise<Date> {
+    const now = new Date();
+    const user = await this.prisma.user.update({
+      where: { id: userId },
+      data: { deletionRequestedAt: now },
+      select: { deletionRequestedAt: true },
+    });
+    // deletionRequestedAt is always non-null right after this write.
+    return user.deletionRequestedAt as Date;
+  }
+
+  async cancelDeletion(userId: string): Promise<void> {
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { deletionRequestedAt: null },
+    });
+  }
+
   async findRecruitmentSummaryByUserId(userId: string): Promise<AppRecruitmentSummary | null> {
     const registration = await this.prisma.registrationSubmission.findFirst({
       where: { userId, recruitmentCycle: { isActive: true } },

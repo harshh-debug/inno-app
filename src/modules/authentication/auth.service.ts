@@ -1,6 +1,7 @@
 import { PlatformRole } from "../../../generated/prisma/client.js";
 import { AppError } from "../../common/errors.js";
 import type { Environment } from "../../config/environment.js";
+import { scheduledDeletionDate } from "../app-profile/account-deletion.constants.js";
 import type { NotificationService } from "../notifications/notification.service.js";
 import { normalizeEmail } from "../users/email.js";
 import { hashPassword, verifyPassword } from "./password.js";
@@ -130,12 +131,21 @@ export class AuthService {
     return { accessToken: await this.tokens.create({ userId: updatedUser.id, role: updatedUser.role }) };
   }
 
-  async loginApp(collegeEmail: string, password: string): Promise<{ accessToken: string }> {
+  // deletionRequestedAt does NOT gate login itself — requireEligibleStudentByEmail
+  // stays silent on it — because the pending-deletion "cancel" screen needs a
+  // valid token to reach the cancel endpoint. It gates ordinary app access
+  // instead, via requireEligibleAppStudent below.
+  async loginApp(collegeEmail: string, password: string): Promise<{ accessToken: string; deletionScheduledFor: string | null }> {
     const user = await this.requireEligibleStudentByEmail(collegeEmail);
     if (user.passwordHash === null || !(await verifyPassword(password, user.passwordHash))) {
       throw this.invalidCredentials();
     }
-    return { accessToken: await this.tokens.create({ userId: user.id, role: user.role }) };
+    return {
+      accessToken: await this.tokens.create({ userId: user.id, role: user.role }),
+      deletionScheduledFor: user.deletionRequestedAt === null
+        ? null
+        : scheduledDeletionDate(user.deletionRequestedAt).toISOString(),
+    };
   }
 
   // Gap 1 — password reset. Same eligibility gate and code/token machinery
@@ -265,8 +275,16 @@ export class AuthService {
   }
 
   async requireEligibleAppStudent(userId: string): Promise<void> {
-    if ((await this.repository.findEligibleStudentById(userId)) === null) {
+    const user = await this.repository.findEligibleStudentById(userId);
+    if (user === null) {
       throw new AppError("APP_ACCESS_DENIED", 403, "App access is not available");
+    }
+    // Account is inert during the deletion grace period — every /app route
+    // except the deletion-request POST/DELETE pair uses this guard, so a
+    // pending-deletion account can only reach those two, cancel included
+    // (DELETE runs behind the plain bearer guard, not this one).
+    if (user.deletionRequestedAt !== null) {
+      throw new AppError("ACCOUNT_PENDING_DELETION", 403, "Account is scheduled for deletion");
     }
   }
 
