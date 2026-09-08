@@ -14,7 +14,7 @@ import type {
 export class AppProfileService {
   constructor(
     private readonly repository: AppProfileRepository,
-    private readonly denylist?: TokenDenylist,
+    private readonly denylist: TokenDenylist,
   ) {}
 
   async getProfile(userId: string): Promise<AppProfile> {
@@ -43,9 +43,7 @@ export class AppProfileService {
   // message someone (Play policy). Mirrors AuthService.logout's revoke call.
   async requestDeletion(userId: string, claims: VerifiedAccessTokenClaims): Promise<AccountDeletionRequest> {
     const requestedAt = await this.repository.requestDeletion(userId);
-    if (this.denylist !== undefined) {
-      await this.denylist.revoke(claims.jti, claims.expiresAt);
-    }
+    await this.denylist.revoke(claims);
     return {
       deletionRequestedAt: requestedAt.toISOString(),
       scheduledFor: scheduledDeletionDate(requestedAt).toISOString(),

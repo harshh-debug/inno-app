@@ -1,6 +1,6 @@
 # Innogeeks backend
 
-Express, Prisma, PostgreSQL, and Redis foundation for the Innogeeks Phase 1
+Express, Prisma, and PostgreSQL foundation for the Innogeeks Phase 1
 recruitment platform. Product behavior is defined in `.codex/PRD.md`; the
 module-by-module delivery order is in `.codex/IMPLEMENTATION_PLAN.md`.
 
@@ -19,7 +19,9 @@ payloads, authentication flow, and error codes, is documented in
 7. In a second terminal, run the email worker with `pnpm worker:email`.
 
 `GET /health` is a liveness check. `GET /ready` verifies PostgreSQL through
-Prisma and returns `503` until the database is reachable. Product routes will
+Prisma and returns `503` until the database is reachable. PostgreSQL is the only
+stateful dependency: the email queue is the `email_jobs` table, so readiness
+covers mail delivery too. Product routes will
 be added below `/api/v1/public`, `/api/v1/admin`, and `/api/v1/app`.
 
 PostgreSQL is published only on `127.0.0.1:5433` by default, keeping it separate
@@ -41,4 +43,4 @@ Useful commands:
 - `pnpm db:logs`
 - `pnpm db:down`
 
-`pnpm db:down` preserves the local PostgreSQL and Redis volumes.
+`pnpm db:down` preserves the local PostgreSQL volume.

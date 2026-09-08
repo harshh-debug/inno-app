@@ -14,7 +14,7 @@ import { createInterviewSlotModule } from "./modules/interview-slots/index.js";
 
 const environment = loadEnvironment();
 const prisma = createPrismaClient(environment);
-const notificationsModule = createNotificationsModule(environment);
+const notificationsModule = createNotificationsModule(prisma, environment);
 const usersModule = createUsersModule(prisma);
 const authenticationModule = createAuthenticationModule(prisma, notificationsModule.notificationService, environment);
 const recruitmentCyclesModule = createRecruitmentCyclesModule(prisma);
@@ -25,7 +25,10 @@ const registrationsModule = createRegistrationsModule(
   notificationsModule.notificationService,
 );
 const appProfileModule = createAppProfileModule(prisma, authenticationModule.denylist);
-const accountDeletionPurgeModule = await createAccountDeletionPurgeModule(prisma, environment.REDIS_URL);
+const accountDeletionPurgeModule = createAccountDeletionPurgeModule(
+  prisma,
+  authenticationModule.denylist,
+);
 const publicAccountDeletionModule = createPublicAccountDeletionModule(
   prisma,
   notificationsModule.notificationService,
@@ -58,10 +61,7 @@ const server = app.listen(environment.PORT, () => {
 async function shutdown(signal: string): Promise<void> {
   console.info(`Received ${signal}; shutting down`);
   server.close(async () => {
-    await notificationsModule.emailQueue.close();
-    await authenticationModule.denylist.close();
-    await accountDeletionPurgeModule.worker.close();
-    await accountDeletionPurgeModule.queue.close();
+    await accountDeletionPurgeModule.scheduler.stop();
     await prisma.$disconnect();
     process.exit(0);
   });

@@ -68,6 +68,14 @@ enum TimelineEventType {
   CUSTOM
 }
 
+// PENDING -> PROCESSING -> deleted on success, or FAILED once attempts run out.
+// There is no SENT state by design; see the EmailJob model comment.
+enum EmailJobStatus {
+  PENDING
+  PROCESSING
+  FAILED
+}
+
 // ─────────────────────────────────────────────
 // Core identity
 // ─────────────────────────────────────────────
@@ -106,10 +114,73 @@ model User {
   decisionsMade     RegistrationSubmission[] @relation("DecisionMadeBy")
   verificationCodes VerificationCode[]
   auditLogsAsActor  AuditLog[]
+  revokedTokens     RevokedToken[]
 
   @@index([role])
   @@index([fullName])
   @@map("users")
+}
+
+// ─────────────────────────────────────────────
+// Revoked access tokens (logout).
+// Access tokens are stateless JWTs, so logout cannot delete the token — it
+// records the token's `jti` here and authenticateAccessToken rejects any
+// request presenting one, even though the signature is still valid.
+// Rows past `expiresAt` are swept by the account-deletion purge job; that
+// sweep is housekeeping only, never correctness — a stale row cannot match a
+// live token, since `jti` is unique and the JWT's own `exp` is checked first.
+// ─────────────────────────────────────────────
+model RevokedToken {
+  jti       String   @id @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(3)
+  revokedAt DateTime @default(now()) @map("revoked_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt])
+  @@map("revoked_tokens")
+}
+
+// ─────────────────────────────────────────────
+// Durable email queue (replaces BullMQ/Redis).
+// Rows are claimed with FOR UPDATE SKIP LOCKED, so two workers never take the
+// same job. `attempts` is incremented at claim time, not on failure, so a
+// worker that dies mid-send still burns an attempt and a poison job cannot
+// loop forever.
+// A delivered row is DELETED, never marked sent: BACKEND_ARCHITECTURE.md
+// forbids retaining email delivery state, and deleting keeps the plaintext OTP
+// in `payload` only for as long as delivery is genuinely pending.
+// ─────────────────────────────────────────────
+model EmailJob {
+  id String @id @default(uuid()) @db.Uuid
+
+  // Deliberately not a Prisma enum: nothing in SQL ever filters on this, it
+  // exists for logging, and EMAIL_JOB_TYPES in email-payload.ts is the source
+  // of truth. An enum here would force a migration to add an email template.
+  type    String         @db.VarChar(64)
+  payload Json           @db.JsonB
+  status  EmailJobStatus @default(PENDING)
+
+  attempts    Int @default(0)
+  maxAttempts Int @default(5) @map("max_attempts")
+
+  // When the row becomes claimable. Retry backoff pushes it into the future.
+  runAt     DateTime  @default(now()) @map("run_at") @db.Timestamptz(3)
+  // Set on claim; a PROCESSING row whose lock is older than the visibility
+  // timeout is reclaimed (the worker holding it died).
+  lockedAt  DateTime? @map("locked_at") @db.Timestamptz(3)
+  lockedBy  String?   @map("locked_by") @db.VarChar(100)
+  lastError String?   @map("last_error") @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  // Drives the claim query.
+  @@index([status, runAt])
+  // Drives stale-lock reclaim and the FAILED-row sweep.
+  @@index([status, lockedAt])
+  @@map("email_jobs")
 }
 
 // ─────────────────────────────────────────────

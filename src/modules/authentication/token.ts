@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { SignJWT, jwtVerify } from "jose";
 import type { PlatformRole } from "../../../generated/prisma/client.js";
 
-export const ACCESS_TOKEN_TTL_SECONDS = 7 * 24 * 60 * 60; // 7 days, matches §7 of the app contract
+export const ACCESS_TOKEN_TTL_SECONDS = 30 * 24 * 60 * 60; // 30 days, matches §7 of the app contract
 
 export interface AccessTokenClaims {
   userId: string;
@@ -32,7 +32,7 @@ export class AccessTokenService {
       .setSubject(claims.userId)
       .setJti(randomUUID())
       .setIssuedAt()
-      .setExpirationTime("7d")
+      .setExpirationTime(`${ACCESS_TOKEN_TTL_SECONDS}s`)
       .sign(this.secret);
   }
 

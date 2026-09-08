@@ -9,15 +9,14 @@ export interface AuthenticatedRequest extends Request {
 }
 
 /**
- * `denylist` is optional so existing composition (tests, partial app wiring)
- * keeps working without Redis. When supplied, a token revoked by
- * `POST /app/auth/logout` is rejected with the same 401 UNAUTHORIZED used for
- * an expired or malformed token — logout does not get a different error
- * shape than any other "your session is over" case (see gap 4 resolution).
+ * A token revoked by `POST /app/auth/logout` (or by the account-deletion
+ * request endpoint) is rejected with the same 401 UNAUTHORIZED used for an
+ * expired or malformed token — logout does not get a different error shape
+ * than any other "your session is over" case (see gap 4 resolution).
  */
 export function authenticateAccessToken(
   tokens: AccessTokenService,
-  denylist?: TokenDenylist,
+  denylist: TokenDenylist,
 ): RequestHandler {
   return async (request: AuthenticatedRequest, _response: Response, next: NextFunction) => {
     const authorization = request.header("authorization");
@@ -27,7 +26,7 @@ export function authenticateAccessToken(
     }
     try {
       const claims = await tokens.verify(authorization.slice("Bearer ".length));
-      if (denylist !== undefined && (await denylist.isRevoked(claims.jti))) {
+      if (await denylist.isRevoked(claims.jti)) {
         next(new AppError("UNAUTHORIZED", 401, "Access token is invalid or expired"));
         return;
       }

@@ -167,15 +167,16 @@ Authorization: Bearer <accessToken>
 
 Access tokens are stateless JWTs, so logout can't literally delete the
 token — instead every token now carries a unique ID (`jti`), and logout adds
-that ID to a **Redis-backed denylist** with a TTL matching the token's own
-remaining lifetime. Any further request with that token gets `401`
-immediately, even though the JWT signature is still technically valid and
-its 7-day expiry hasn't passed.
+that ID to a **denylist in Postgres** (the `revoked_tokens` table). Any
+further request with that token gets `401` immediately, even though the JWT
+signature is still technically valid and its 7-day expiry hasn't passed.
 
-This reuses the Redis instance already running for the email queue — no new
-infrastructure, no new service to operate. The denylist entry expires on its
-own at the token's `exp`, so nothing ever needs a cleanup job and it never
-grows unbounded.
+This lives in the database the app already has — no new infrastructure and no
+new service to operate. Postgres has no per-row TTL, so rows past the token's
+own `exp` are swept by the existing 6-hourly account-deletion purge job, which
+keeps the table bounded. That sweep is housekeeping only, never correctness: a
+stale row cannot match a live token, because `jti` is unique per issued token
+and the JWT's own expiry is checked before the denylist is consulted.
 
 This directly closes the shared/lost-device exposure you flagged: instead of
 "stays valid for up to 7 days after logout," it's now "invalid the instant
@@ -240,7 +241,7 @@ disagreement, no backend follow-up needed.
 | 2 | `GET /me` | **Fixed** (reduced scope) | New endpoint; only real schema fields — enrollment/branch/section/semester/CGPA need a separate scoping pass |
 | 3 | Recruitment status | **Fixed** (simpler shape) | New endpoint; `decision` + `testSlot`, no fake pipeline stages |
 | 4 | Token expiry semantics | **Confirmed, documented** | No code change; written into contract §9 |
-| 5 | Logout | **Fixed** | New endpoint, Redis-backed `jti` denylist, no new infra |
+| 5 | Logout | **Fixed** | New endpoint, Postgres `jti` denylist (`revoked_tokens`), no new infra |
 | 6 | Content + event registration | **Still open** | Needs product scoping; remove the Register button now |
 | 7 | Two-email clarification | **Confirmed** | No code change; copy guidance given |
 | 8 | Secure storage | **No action needed** | App-side only |

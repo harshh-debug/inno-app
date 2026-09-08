@@ -329,7 +329,7 @@ Status: `200 OK`
 ```
 
 Store `accessToken` in Android secure credential storage. It is an access-only
-JWT valid for seven days. See §9 for session semantics; there is no
+JWT valid for thirty days. See §9 for session semantics; there is no
 refresh-token endpoint.
 
 ### Errors
@@ -553,7 +553,7 @@ Status: `200 OK`
 
 Always delete the locally stored token on logout regardless of the response —
 if this call fails (e.g. no network), the app has still done the correct
-client-side thing, and the token will still expire naturally within 7 days.
+client-side thing, and the token will still expire naturally within 30 days.
 
 ## 12. Student profile
 
