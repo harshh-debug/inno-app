@@ -25,7 +25,11 @@ const registrationsModule = createRegistrationsModule(
   notificationsModule.notificationService,
 );
 const appProfileModule = createAppProfileModule(prisma, authenticationModule.denylist);
-const accountDeletionPurgeModule = await createAccountDeletionPurgeModule(prisma, environment.REDIS_URL);
+const accountDeletionPurgeModule = await createAccountDeletionPurgeModule(
+  prisma,
+  environment.REDIS_URL,
+  authenticationModule.denylist,
+);
 const publicAccountDeletionModule = createPublicAccountDeletionModule(
   prisma,
   notificationsModule.notificationService,
@@ -59,7 +63,6 @@ async function shutdown(signal: string): Promise<void> {
   console.info(`Received ${signal}; shutting down`);
   server.close(async () => {
     await notificationsModule.emailQueue.close();
-    await authenticationModule.denylist.close();
     await accountDeletionPurgeModule.worker.close();
     await accountDeletionPurgeModule.queue.close();
     await prisma.$disconnect();

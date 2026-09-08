@@ -1,8 +1,30 @@
 import { ACCOUNT_DELETION_GRACE_PERIOD_DAYS } from "../app-profile/account-deletion.constants.js";
+import type { TokenDenylist } from "../authentication/token-denylist.js";
 import type { AccountDeletionPurgeRepository } from "./account-deletion-purge.repository.js";
 
+export interface PurgeRunResult {
+  anonymizedAccounts: number;
+  sweptTokens: number;
+}
+
 export class AccountDeletionPurgeService {
-  constructor(private readonly repository: AccountDeletionPurgeRepository) {}
+  constructor(
+    private readonly repository: AccountDeletionPurgeRepository,
+    private readonly denylist: TokenDenylist,
+  ) {}
+
+  /**
+   * Everything the scheduled purge does. The revoked-token sweep rides along
+   * here because Postgres has no per-row TTL and this is the only recurring
+   * job in the API process — it is housekeeping, not correctness, so it is
+   * safe for it to run late or be skipped (see TokenDenylist).
+   */
+  async run(now: Date = new Date()): Promise<PurgeRunResult> {
+    return {
+      anonymizedAccounts: await this.purgeDueAccounts(now),
+      sweptTokens: await this.denylist.deleteExpired(now),
+    };
+  }
 
   async purgeDueAccounts(now: Date = new Date()): Promise<number> {
     const cutoff = new Date(now.getTime() - ACCOUNT_DELETION_GRACE_PERIOD_DAYS * 24 * 60 * 60 * 1_000);

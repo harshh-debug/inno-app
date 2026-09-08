@@ -21,7 +21,7 @@ export class AuthService {
     private readonly tokens: AccessTokenService,
     private readonly verificationHashSecret: Environment["VERIFICATION_HASH_SECRET"],
     private readonly transaction: <T>(operation: (repository: AuthRepository) => Promise<T>) => Promise<T>,
-    private readonly denylist?: TokenDenylist,
+    private readonly denylist: TokenDenylist,
   ) {}
 
   async loginAdmin(collegeEmail: string, password: string): Promise<{ accessToken: string }> {
@@ -259,12 +259,9 @@ export class AuthService {
 
   // Gap 5 — logout. Access tokens are stateless JWTs, so this cannot delete
   // the token; it denylists the token's `jti` for the remainder of its own
-  // 7-day life. See TokenDenylist for why this needs no cleanup job.
+  // 7-day life. See TokenDenylist for how those rows are swept.
   async logout(claims: VerifiedAccessTokenClaims): Promise<void> {
-    if (this.denylist === undefined) {
-      throw new AppError("LOGOUT_UNAVAILABLE", 503, "Logout is temporarily unavailable");
-    }
-    await this.denylist.revoke(claims.jti, claims.expiresAt);
+    await this.denylist.revoke(claims);
   }
 
   async requireActiveAdmin(userId: string): Promise<void> {

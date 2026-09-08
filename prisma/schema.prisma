@@ -106,10 +106,32 @@ model User {
   decisionsMade     RegistrationSubmission[] @relation("DecisionMadeBy")
   verificationCodes VerificationCode[]
   auditLogsAsActor  AuditLog[]
+  revokedTokens     RevokedToken[]
 
   @@index([role])
   @@index([fullName])
   @@map("users")
+}
+
+// ─────────────────────────────────────────────
+// Revoked access tokens (logout).
+// Access tokens are stateless JWTs, so logout cannot delete the token — it
+// records the token's `jti` here and authenticateAccessToken rejects any
+// request presenting one, even though the signature is still valid.
+// Rows past `expiresAt` are swept by the account-deletion purge job; that
+// sweep is housekeeping only, never correctness — a stale row cannot match a
+// live token, since `jti` is unique and the JWT's own `exp` is checked first.
+// ─────────────────────────────────────────────
+model RevokedToken {
+  jti       String   @id @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(3)
+  revokedAt DateTime @default(now()) @map("revoked_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt])
+  @@map("revoked_tokens")
 }
 
 // ─────────────────────────────────────────────

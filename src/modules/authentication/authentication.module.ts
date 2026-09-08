@@ -10,11 +10,11 @@ import { TokenDenylist } from "./token-denylist.js";
 export function createAuthenticationModule(
   prisma: PrismaClient,
   notifications: NotificationService,
-  environment: Pick<Environment, "JWT_SECRET" | "VERIFICATION_HASH_SECRET" | "REDIS_URL">,
+  environment: Pick<Environment, "JWT_SECRET" | "VERIFICATION_HASH_SECRET">,
 ) {
   const repository = new AuthRepository(prisma);
   const tokens = new AccessTokenService(environment.JWT_SECRET);
-  const denylist = new TokenDenylist(environment.REDIS_URL);
+  const denylist = new TokenDenylist(prisma);
   const service = new AuthService(
     repository,
     notifications,

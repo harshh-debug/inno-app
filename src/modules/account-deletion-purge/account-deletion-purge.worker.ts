@@ -15,9 +15,11 @@ export function createAccountDeletionPurgeWorker(
   const worker = new Worker(
     ACCOUNT_DELETION_PURGE_QUEUE_NAME,
     async () => {
-      const purged = await service.purgeDueAccounts();
-      if (purged > 0) {
-        console.info(`Account deletion purge: anonymized ${purged} account(s)`);
+      const { anonymizedAccounts, sweptTokens } = await service.run();
+      if (anonymizedAccounts > 0 || sweptTokens > 0) {
+        console.info(
+          `Account deletion purge: anonymized ${anonymizedAccounts} account(s), swept ${sweptTokens} expired token(s)`,
+        );
       }
     },
     { connection: redisConnectionOptions(redisUrl) },

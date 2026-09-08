@@ -1,7 +1,5 @@
-import { Redis } from "ioredis";
-import { redisConnectionOptions } from "../notifications/email-queue.js";
-
-const KEY_PREFIX = "denylisted-token:";
+import type { PrismaClient } from "../../../generated/prisma/client.js";
+import type { VerifiedAccessTokenClaims } from "./token.js";
 
 /**
  * Answers gap 5 (logout). Access tokens are stateless JWTs with no
@@ -10,28 +8,44 @@ const KEY_PREFIX = "denylisted-token:";
  * any request that presents a denylisted `jti`, even if the JWT signature
  * is otherwise valid.
  *
- * Backed by the same Redis instance already used for the email queue, so
- * this adds no new infrastructure. Entries expire automatically at the
- * token's own `exp`, so the denylist never grows unbounded and never needs
- * a cleanup job.
+ * Backed by the `revoked_tokens` table, so the denylist survives restarts
+ * and needs no infrastructure beyond the database the app already has.
+ * Postgres has no per-row TTL, so `deleteExpired` drops rows past their own
+ * `exp`; the account-deletion purge job calls it every 6 hours. That sweep
+ * is housekeeping only — a stale row can never match a live token, because
+ * `jti` is unique per issued token and `AccessTokenService.verify` rejects
+ * an expired JWT before the denylist is consulted.
+ *
+ * This owns every query against `revoked_tokens`; nothing else touches it.
  */
 export class TokenDenylist {
-  private readonly redis: Redis;
+  constructor(private readonly prisma: PrismaClient) {}
 
-  constructor(redisUrl: string) {
-    this.redis = new Redis(redisConnectionOptions(redisUrl));
-  }
-
-  async revoke(jti: string, expiresAt: Date): Promise<void> {
-    const ttlSeconds = Math.max(1, Math.ceil((expiresAt.getTime() - Date.now()) / 1_000));
-    await this.redis.set(KEY_PREFIX + jti, "1", "EX", ttlSeconds);
+  /**
+   * Upsert rather than create: logging out twice with the same token is a
+   * no-op, not a unique-constraint failure.
+   */
+  async revoke(claims: VerifiedAccessTokenClaims): Promise<void> {
+    await this.prisma.revokedToken.upsert({
+      where: { jti: claims.jti },
+      create: { jti: claims.jti, userId: claims.userId, expiresAt: claims.expiresAt },
+      update: {},
+    });
   }
 
   async isRevoked(jti: string): Promise<boolean> {
-    return (await this.redis.exists(KEY_PREFIX + jti)) === 1;
+    const revoked = await this.prisma.revokedToken.findUnique({
+      where: { jti },
+      select: { jti: true },
+    });
+    return revoked !== null;
   }
 
-  close(): Promise<"OK"> {
-    return this.redis.quit();
+  /** Returns how many rows were dropped, for the purge job's log line. */
+  async deleteExpired(now: Date = new Date()): Promise<number> {
+    const { count } = await this.prisma.revokedToken.deleteMany({
+      where: { expiresAt: { lt: now } },
+    });
+    return count;
   }
 }
