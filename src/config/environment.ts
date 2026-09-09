@@ -8,6 +8,15 @@ const environmentSchema = z.object({
   APP_URL: z.url().default("http://localhost:3000"),
   JWT_SECRET: z.string().min(32),
   VERIFICATION_HASH_SECRET: z.string().min(32),
+  // Hosting escape hatch, off by default. Render's free tier has no background
+  // worker service, so the email worker has to ride inside the API process
+  // there. Everywhere else the two stay separate processes, as designed: the
+  // worker holds SMTP credentials the API has no reason to load, and a slow
+  // SMTP server cannot then stall request handling.
+  WORKER_IN_PROCESS: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((value) => value === "true"),
 });
 
 export type Environment = z.infer<typeof environmentSchema>;

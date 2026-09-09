@@ -1,0 +1,94 @@
+# Render Blueprint — Innogeeks backend.
+#
+# One free web service. PostgreSQL is hosted on Neon rather than declared here,
+# so no `databases:` block: set DATABASE_URL by hand in the Render dashboard
+# (see below). Postgres is the only stateful dependency — the email queue is the
+# `email_jobs` table and the JWT denylist is `revoked_tokens` — so nothing else
+# needs provisioning.
+#
+# Free-tier constraints this file works around, and their costs:
+#
+#   * No background worker service type, so the email worker runs inside the API
+#     process via WORKER_IN_PROCESS. On a paid plan, drop that variable and add
+#     a `type: worker` service running `pnpm start:worker` instead.
+#   * No pre-deploy command, so `db:deploy` runs at the end of the build. That
+#     means migrations apply while the previous version is still serving, which
+#     is fine for additive migrations and not for destructive ones — take those
+#     to a paid plan's preDeployCommand, or run them manually first.
+#   * The service sleeps after ~15 minutes without traffic. The 6-hourly
+#     account-deletion purge is an in-process timer, so it will not fire while
+#     asleep; expect it to run on wake rather than on schedule. Anonymization is
+#     idempotent and safe to run late, but if the 14-day deletion deadline has
+#     to be met predictably, use a cron job or a paid instance.
+
+services:
+  - type: web
+    name: innogeeks-api
+    runtime: node
+    plan: free
+    region: singapore
+    branch: main
+
+    # `generated/` is gitignored and tsconfig.json compiles it, so `prisma
+    # generate` has to precede tsc — it is folded into `pnpm build`.
+    buildCommand: pnpm install --frozen-lockfile && pnpm build && pnpm db:deploy
+    startCommand: pnpm start
+
+    healthCheckPath: /health
+
+    envVars:
+      - key: NODE_ENV
+        value: production
+
+      # Neon connection string. Use the DIRECT (non-pooled) endpoint — the one
+      # without `-pooler` in the host — and keep `?sslmode=require`. The pooled
+      # endpoint would also work for request traffic now that the purge lock is
+      # transaction-scoped, but `prisma migrate deploy` needs the direct one,
+      # and this build runs migrations on the same URL.
+      - key: DATABASE_URL
+        sync: false
+
+      # Must be the service's real public URL: it is baked into the account
+      # verification and deletion links the mailer sends. Render exposes its own
+      # host here, so the link cannot drift from the deployment.
+      - key: APP_URL
+        fromService:
+          type: web
+          name: innogeeks-api
+          envVarKey: RENDER_EXTERNAL_URL
+
+      # Both are validated at boot as >= 32 characters, and must differ from
+      # each other. Rotating JWT_SECRET invalidates every issued access token;
+      # rotating VERIFICATION_HASH_SECRET invalidates outstanding email links.
+      - key: JWT_SECRET
+        generateValue: true
+      - key: VERIFICATION_HASH_SECRET
+        generateValue: true
+
+      # Free-tier only; see the note at the top of this file.
+      - key: WORKER_IN_PROCESS
+        value: "true"
+
+      # Neon's free compute autosuspends when idle, and a 1s poll would keep it
+      # awake around the clock — roughly 730 compute-hours a month against a
+      # ~190-hour allowance. 30s lets the database sleep between bursts; the
+      # cost is up to 30s of added latency on a verification email, and none on
+      # a busy queue, since a full batch drains without waiting.
+      - key: EMAIL_POLL_INTERVAL_MS
+        value: "30000"
+
+      # Real SMTP provider — Mailpit is local-only and delivers nowhere.
+      # Port 587 (STARTTLS); Render blocks outbound port 25.
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_SECURE
+        value: "false"
+      - key: SMTP_FROM
+        sync: false
+      # The env schema rejects one without the other.
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false

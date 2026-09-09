@@ -1,6 +1,7 @@
 import { createApp } from "./app.js";
-import { loadEnvironment } from "./config/environment.js";
+import { loadEmailWorkerEnvironment, loadEnvironment } from "./config/environment.js";
 import { createPrismaClient } from "./database/prisma.js";
+import { createEmailWorker } from "./workers/email/email.worker.js";
 import { createNotificationsModule } from "./modules/notifications/notifications.module.js";
 import { createAuthenticationModule } from "./modules/authentication/authentication.module.js";
 import { createUsersModule } from "./modules/users/users.module.js";
@@ -54,6 +55,18 @@ const app = createApp(
   { controller: publicAccountDeletionModule.controller },
 );
 
+// Only where the host cannot run `pnpm start:worker` as its own process. SMTP
+// configuration is read here rather than at module load so that a deployment
+// running the worker separately still needs no SMTP variables on the API.
+const emailWorker = environment.WORKER_IN_PROCESS
+  ? createEmailWorker(prisma, loadEmailWorkerEnvironment())
+  : null;
+
+if (emailWorker !== null) {
+  emailWorker.start();
+  console.info("Email worker started in-process (WORKER_IN_PROCESS=true)");
+}
+
 const server = app.listen(environment.PORT, () => {
   console.info(`Backend listening on port ${environment.PORT}`);
 });
@@ -62,6 +75,7 @@ async function shutdown(signal: string): Promise<void> {
   console.info(`Received ${signal}; shutting down`);
   server.close(async () => {
     await accountDeletionPurgeModule.scheduler.stop();
+    await emailWorker?.stop();
     await prisma.$disconnect();
     process.exit(0);
   });
