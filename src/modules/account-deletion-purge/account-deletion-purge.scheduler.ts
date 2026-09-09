@@ -5,9 +5,10 @@ import type { AccountDeletionPurgeService } from "./account-deletion-purge.servi
 // no account sits anonymizable for long, without running the scan constantly.
 const PURGE_INTERVAL_MS = 6 * 60 * 60 * 1_000;
 
-// Long enough that boot is not competing with request traffic, short enough
-// that a local run is easy to observe.
-const INITIAL_DELAY_MS = 10 * 1_000;
+// Long enough that boot is not competing with request traffic or with the
+// first connection to a serverless database that may still be waking, short
+// enough that a local run is easy to observe.
+const INITIAL_DELAY_MS = 45 * 1_000;
 
 // Arbitrary but fixed: any key works, provided every replica uses the same one.
 const PURGE_ADVISORY_LOCK_KEY = 4_820_7731;
@@ -16,6 +17,12 @@ const PURGE_ADVISORY_LOCK_KEY = 4_820_7731;
 // findMany plus a handful of updates, so seconds; this is a stuck-run ceiling,
 // not an expected duration.
 const PURGE_LOCK_TIMEOUT_MS = 5 * 60 * 1_000;
+
+// How long to wait for a connection before giving up on starting the
+// transaction. Prisma's 2s default is too tight against a serverless database:
+// a suspended Neon compute takes seconds to wake, and the first purge runs
+// shortly after boot, when the pool may hold no established connection at all.
+const PURGE_LOCK_MAX_WAIT_MS = 30 * 1_000;
 
 /**
  * Replaces the BullMQ repeatable job. Running once shortly after boot and then
@@ -109,7 +116,7 @@ export class AccountDeletionPurgeScheduler {
             );
           }
         },
-        { timeout: PURGE_LOCK_TIMEOUT_MS },
+        { timeout: PURGE_LOCK_TIMEOUT_MS, maxWait: PURGE_LOCK_MAX_WAIT_MS },
       );
     } catch (error) {
       console.error("Account deletion purge failed", {
