@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Account Deletion - {{APP_NAME}}</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      max-width: 640px;
+      margin: 60px auto;
+      padding: 0 20px;
+      line-height: 1.6;
+      color: #1a1a1a;
+    }
+    h1 { font-size: 24px; margin-bottom: 8px; }
+    .steps { margin: 24px 0; padding-left: 20px; }
+    .steps li { margin-bottom: 10px; }
+    .note {
+      background: #f5f5f5;
+      border-left: 3px solid #377dff;
+      padding: 12px 16px;
+      margin: 24px 0;
+      font-size: 14px;
+    }
+    .contact { margin-top: 32px; font-size: 14px; color: #555; }
+  </style>
+</head>
+<body>
+  <h1>Account & Data Deletion</h1>
+  <p>You can request deletion of your Innogeeks account and associated data at any time.</p>
+
+  <h2>How to request deletion</h2>
+  <ol class="steps">
+    <li>Open the app, go to <strong>Settings &gt; Account</strong>, and tap <strong>Delete Account</strong>.</li>
+    <li>Or email <strong>innogeeks.kiet@edu</strong> from your registered email address with the subject "Delete My Account".</li>
+  </ol>
+
+  <h2>What gets deleted</h2>
+  <p>All your personal data, including profile information, messages, and any other content associated with your account, will be deleted.</p>
+
+  <div class="note">
+    Data is permanently deleted within <strong>30 days</strong> of a verified request.
+    {{RETENTION_EXCEPTIONS}}
+  </div>
+
+  <p class="contact">Questions? Contact us at <strong>innogeeks.kiet@edu</strong>.</p>
+</body>
+</html>
