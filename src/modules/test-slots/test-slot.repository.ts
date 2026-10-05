@@ -1,11 +1,14 @@
-import type { Prisma, PrismaClient } from "../../../generated/prisma/client.js";
+import type { Prisma, PrismaClient, TestResult } from "../../../generated/prisma/client.js";
 import type {
   ActiveSubmissionForBooking,
   AdminTestSlot,
   AdminTestSlotBookingRow,
   AdminTestSlotDetail,
+  AppTestSlot,
   AppTestSlotBooking,
+  BookableTestSlot,
   CreateTestSlotInput,
+  TestResultUpdate,
   TestSlotForBooking,
   TestSlotRepository,
   UpdateTestSlotInput,
@@ -20,9 +23,22 @@ export class PrismaTestSlotRepository implements TestSlotRepository {
   findActiveSubmissionForUser = async (userId: string): Promise<ActiveSubmissionForBooking | null> => {
     const submission = await this.prisma.registrationSubmission.findFirst({
       where: { userId, recruitmentCycle: { isActive: true } },
-      select: { id: true, paymentStatus: true },
+      select: {
+        id: true,
+        paymentStatus: true,
+        decision: true,
+        recruitmentCycle: { select: { testSlotSwitchingEnabled: true } },
+      },
     });
-    return submission;
+    if (submission === null) {
+      return null;
+    }
+    return {
+      id: submission.id,
+      paymentStatus: submission.paymentStatus,
+      decision: submission.decision,
+      testSlotSwitchingEnabled: submission.recruitmentCycle.testSlotSwitchingEnabled,
+    };
   };
 
   findBookingForSubmission = async (submissionId: string): Promise<AppTestSlotBooking | null> => {
@@ -59,6 +75,72 @@ export class PrismaTestSlotRepository implements TestSlotRepository {
       select: { id: true, capacity: true },
     });
     return slot;
+  };
+
+  /** Student-facing lookup: active cycle only, with the fields needed to decide whether it's open. */
+  findBookableSlotById = async (testSlotId: string): Promise<BookableTestSlot | null> => {
+    return this.prisma.testSlot.findFirst({
+      where: { id: testSlotId, recruitmentCycle: { isActive: true } },
+      select: { id: true, capacity: true, isVisible: true, startTime: true },
+    });
+  };
+
+  /** Visible upcoming slots, plus the student's own slot even if it is hidden or already started. */
+  listSlotsForStudent = async (submissionId: string, now: Date): Promise<AppTestSlot[]> => {
+    const slots = await this.prisma.testSlot.findMany({
+      where: {
+        recruitmentCycle: { isActive: true },
+        OR: [{ isVisible: true, startTime: { gt: now } }, { bookings: { some: { submissionId } } }],
+      },
+      orderBy: { order: "asc" },
+      select: {
+        id: true,
+        startTime: true,
+        endTime: true,
+        capacity: true,
+        bookedCount: true,
+        bookings: { where: { submissionId }, select: { id: true } },
+      },
+    });
+
+    return slots.map((slot) => ({
+      testSlotId: slot.id,
+      startTime: slot.startTime.toISOString(),
+      endTime: slot.endTime.toISOString(),
+      capacity: slot.capacity,
+      remaining: Math.max(slot.capacity - slot.bookedCount, 0),
+      isMine: slot.bookings.length > 0,
+    }));
+  };
+
+  /** Compare-and-swap on the current slot, so two racing switches can't both release the same seat. */
+  moveBooking = async (
+    submissionId: string,
+    fromSlotId: string,
+    toSlotId: string,
+  ): Promise<AppTestSlotBooking | null> => {
+    const moved = await this.prisma.testSlotBooking.updateMany({
+      where: { submissionId, testSlotId: fromSlotId },
+      data: { testSlotId: toSlotId, bookedAt: new Date() },
+    });
+    if (moved.count !== 1) {
+      return null;
+    }
+    const booking = await this.findBookingForSubmission(submissionId);
+    return booking;
+  };
+
+  setTestResult = async (submissionId: string, result: TestResult): Promise<TestResultUpdate> => {
+    const updated = await this.prisma.registrationSubmission.update({
+      where: { id: submissionId },
+      data: { testResult: result, testResultUpdatedAt: new Date() },
+      select: { id: true, testResult: true, testResultUpdatedAt: true },
+    });
+    return {
+      registrationId: updated.id,
+      testResult: updated.testResult,
+      testResultUpdatedAt: (updated.testResultUpdatedAt ?? new Date()).toISOString(),
+    };
   };
 
   /** Atomic conditional increment — mirrors RegistrationRepository.transitionPaymentStatus. */

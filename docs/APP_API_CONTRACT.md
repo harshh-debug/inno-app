@@ -1,7 +1,7 @@
 # Innogeeks Android App API Contract
 
-Contract version: `0.7.0`  
-Last updated: `2026-09-08`  
+Contract version: `0.8.0`  
+Last updated: `2026-10-06`  
 API namespace: `/api/v1/app`
 
 This document contains only Android app endpoints that are currently
@@ -24,8 +24,12 @@ panel endpoints, or planned backend modules.
 | `GET /me` | Read the authenticated student's profile | Bearer token |
 | `PATCH /me` | Update the authenticated student's editable profile fields (`fullName`, `phone`) | Bearer token |
 | `GET /recruitment` | Read the authenticated student's payment, decision, test-slot, and interview status | Bearer token |
-| `GET /test-slot-booking` | Read the student's own admin-assigned test slot | Bearer token |
-| `GET /interview-booking` | Read the student's own admin-assigned interview slot | Bearer token |
+| `GET /test-slots` | List bookable test slots with seats left | Bearer token |
+| `GET /test-slot-booking` | Read the student's own test slot | Bearer token |
+| `POST /test-slot-booking` | Book or switch the student's test slot (first-come-first-serve) | Bearer token |
+| `GET /interview-slots` | List bookable interview slots with seats left (after the test is passed) | Bearer token |
+| `GET /interview-booking` | Read the student's own interview slot | Bearer token |
+| `POST /interview-booking` | Book or switch the student's interview slot | Bearer token |
 | `POST /me/deletion-request` | Request account deletion (starts a 14-day grace period, revokes the current token) | Bearer token |
 | `DELETE /me/deletion-request` | Cancel a pending deletion request | Bearer token |
 
@@ -659,17 +663,20 @@ Status: `200 OK`
     "paid": true,
     "decision": "PENDING",
     "decisionNote": null,
+    "testResult": "PENDING",
     "testSlot": {
       "booked": false,
       "startTime": null,
-      "endTime": null
+      "endTime": null,
+      "switchingEnabled": true
     },
     "interview": {
       "assigned": false,
       "startTime": null,
       "endTime": null,
       "location": null,
-      "meetingUrl": null
+      "meetingUrl": null,
+      "switchingEnabled": true
     }
   }
 }
@@ -680,16 +687,18 @@ Status: `200 OK`
 | `paid` | boolean | current payment status of the active-cycle registration |
 | `decision` | string | one of `PENDING`, `SELECTED`, `WAITLISTED`, `REJECTED` |
 | `decisionNote` | string \| null | applicant-visible note set by an admin alongside the decision |
-| `testSlot.booked` | boolean | whether an admin has assigned the student a test slot |
+| `testResult` | string | one of `PENDING`, `PASSED`, `FAILED`; set by an admin. Interview booking opens only on `PASSED` |
+| `testSlot.booked` | boolean | whether the student has a test slot (self-booked or admin-assigned) |
+| `testSlot.switchingEnabled`, `interview.switchingEnabled` | boolean | when false, a student who already has a slot can no longer switch; first bookings are still allowed |
 | `testSlot.startTime`, `testSlot.endTime` | string (ISO 8601) \| null | only present when `booked` is true |
-| `interview.assigned` | boolean | whether an admin has assigned the student an interview slot |
+| `interview.assigned` | boolean | whether the student has an interview slot (self-booked or admin-assigned) |
 | `interview.startTime`, `interview.endTime` | string (ISO 8601) \| null | only present when `assigned` is true |
 | `interview.location`, `interview.meetingUrl` | string \| null | only present when `assigned` is true; either or both may still be null (e.g. in-person interview has no `meetingUrl`) |
 
 There is no separate "stage" field — `decision` plus `testSlot.booked` plus
 `interview.assigned` are the facts that define where a student stands.
-Neither test-slot nor interview scheduling is student-driven: an admin
-assigns both (§14, §15); this endpoint only reads the current state.
+Students book their own test and interview slots (§14, §15); an admin can
+still assign or override either. This endpoint only reads the current state.
 
 ### Errors
 
@@ -701,11 +710,47 @@ assigns both (§14, §15); this endpoint only reads the current state.
 
 ## 14. Test-slot booking
 
-An admin assigns each paid first-year student a test slot from the admin
-panel/API — there is no student-facing slot list or booking action. The app
-only ever reads its own assignment.
+A paid student with no decision yet picks a test slot from a list. Seats are
+first-come-first-serve: the server reserves a seat atomically, so a full slot
+is rejected with `409 TEST_SLOT_FULL` no matter how many students tap at once.
+A student can switch slots until an admin turns switching off for the cycle
+(`testSlot.switchingEnabled` in §13 and `switchingEnabled` below). Admins can
+still assign or override a slot regardless of that flag.
 
-### Read my assigned slot
+### List slots
+
+```http
+GET /api/v1/app/test-slots
+Authorization: Bearer <accessToken>
+```
+
+#### Success
+
+Status: `200 OK`
+
+```json
+{
+  "data": {
+    "switchingEnabled": true,
+    "slots": [
+      {
+        "testSlotId": "8f14e...",
+        "startTime": "2026-09-10T09:00:00.000Z",
+        "endTime": "2026-09-10T10:00:00.000Z",
+        "capacity": 20,
+        "remaining": 3,
+        "isMine": false
+      }
+    ]
+  }
+}
+```
+
+Only visible, upcoming slots are listed, plus the student's own slot even if
+it has since started or been hidden. `remaining` is a snapshot; the book call
+is what decides. Refresh the list after any `409`.
+
+### Read my slot
 
 ```http
 GET /api/v1/app/test-slot-booking
@@ -727,10 +772,8 @@ Status: `200 OK`
 }
 ```
 
-`bookedAt` is when the admin made (or last changed) the assignment, not
-something the student set. Poll or refresh this on app-resume to pick up a
-new or changed assignment made while the student wasn't looking — it is not
-pushed to the app.
+`bookedAt` is when the slot was booked, switched to, or last assigned by an
+admin. Refresh on app-resume to pick up an admin change.
 
 #### Errors
 
@@ -739,14 +782,81 @@ pushed to the app.
 | `401` | `UNAUTHORIZED` | Session expired, drop to guest mode |
 | `403` | `APP_ACCESS_DENIED` | Show access-denied state, not session-expired |
 | `403` | `ACCOUNT_PENDING_DELETION` | Route to the pending-deletion/cancel screen (§9, §16), not the access-denied state |
-| `404` | `TEST_SLOT_NOT_BOOKED` | Show the "no slot assigned yet" empty state |
+| `404` | `TEST_SLOT_NOT_BOOKED` | Show the "no slot yet" empty state |
+
+### Book or switch my slot
+
+```http
+POST /api/v1/app/test-slot-booking
+Authorization: Bearer <accessToken>
+Content-Type: application/json
+
+{ "testSlotId": "8f14e..." }
+```
+
+Books the first slot or moves to another in one step; the new seat is
+reserved before the old one is released, so a failure never loses the
+existing booking. Choosing the slot the student already has is a no-op
+returning `200`.
+
+#### Success
+
+Status: `200 OK`, body identical to "Read my slot".
+
+#### Errors
+
+In addition to the `401`/`403` rows above:
+
+| HTTP | Code | App action |
+|---|---|---|
+| `404` | `TEST_SLOT_NOT_FOUND` | Refresh the list |
+| `409` | `TEST_SLOT_FULL` | Tell the student the slot just filled; refresh the list |
+| `409` | `TEST_SLOT_SWITCHING_DISABLED` | Switching is off; show the current slot read-only |
+| `409` | `TEST_SLOT_LOCKED` | The current slot has already started; show read-only |
+| `409` | `TEST_SLOT_CLOSED` | Target is hidden or already started; refresh the list |
+| `409` | `TEST_SLOT_ALREADY_BOOKED` | Lost a race with another request; refresh |
+| `409` | `RECRUITMENT_ALREADY_DECIDED` | A decision exists; booking is closed |
 
 ## 15. Interview scheduling
 
-Same model as test-slot booking (§14): an admin assigns each student an
-interview slot; there is no student-facing slot list or booking action.
+Same model as test-slot booking (§14), but only a student whose
+`testResult` is `PASSED` can list or book. Before that, both calls return
+`403 INTERVIEW_BOOKING_NOT_OPEN`. Interviewer names are never exposed.
 
-### Read my assigned interview
+### List slots
+
+```http
+GET /api/v1/app/interview-slots
+Authorization: Bearer <accessToken>
+```
+
+#### Success
+
+Status: `200 OK`
+
+```json
+{
+  "data": {
+    "switchingEnabled": true,
+    "slots": [
+      {
+        "interviewSlotId": "8f14e...",
+        "startTime": "2026-09-15T09:00:00.000Z",
+        "endTime": "2026-09-15T09:30:00.000Z",
+        "location": "Room 204, Innovation Block",
+        "meetingUrl": null,
+        "capacity": 4,
+        "remaining": 1,
+        "isMine": false
+      }
+    ]
+  }
+}
+```
+
+Cancelled and past slots are omitted, except the student's own.
+
+### Read my interview
 
 ```http
 GET /api/v1/app/interview-booking
@@ -772,8 +882,7 @@ Status: `200 OK`
 
 `location` and `meetingUrl` are each independently nullable — an in-person
 interview has no `meetingUrl`, a remote one may have no physical `location`.
-`bookedAt` is when the admin made (or last changed) the assignment. Poll or
-refresh this on app-resume, same as §14.
+Refresh on app-resume, same as §14.
 
 #### Errors
 
@@ -782,7 +891,34 @@ refresh this on app-resume, same as §14.
 | `401` | `UNAUTHORIZED` | Session expired, drop to guest mode |
 | `403` | `APP_ACCESS_DENIED` | Show access-denied state, not session-expired |
 | `403` | `ACCOUNT_PENDING_DELETION` | Route to the pending-deletion/cancel screen (§9, §16), not the access-denied state |
-| `404` | `INTERVIEW_SLOT_NOT_BOOKED` | Show the "no interview assigned yet" empty state |
+| `404` | `INTERVIEW_SLOT_NOT_BOOKED` | Show the "no interview yet" empty state |
+
+### Book or switch my interview
+
+```http
+POST /api/v1/app/interview-booking
+Authorization: Bearer <accessToken>
+Content-Type: application/json
+
+{ "interviewSlotId": "8f14e..." }
+```
+
+Success is `200 OK` with the "Read my interview" body.
+
+#### Errors
+
+In addition to the `401`/`403` rows above:
+
+| HTTP | Code | App action |
+|---|---|---|
+| `403` | `INTERVIEW_BOOKING_NOT_OPEN` | Test not passed yet; hide the booking CTA |
+| `404` | `INTERVIEW_SLOT_NOT_FOUND` | Refresh the list |
+| `409` | `INTERVIEW_SLOT_FULL` | Slot just filled; refresh the list |
+| `409` | `INTERVIEW_SLOT_SWITCHING_DISABLED` | Switching is off; show read-only |
+| `409` | `INTERVIEW_SLOT_LOCKED` | The current slot has already started; show read-only |
+| `409` | `INTERVIEW_SLOT_CLOSED` | Target already started; refresh the list |
+| `409` | `INTERVIEW_SLOT_ALREADY_BOOKED` | Lost a race with another request; refresh |
+| `409` | `RECRUITMENT_ALREADY_DECIDED` | A decision exists; booking is closed |
 
 ## 16. Account deletion
 

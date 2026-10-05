@@ -8,6 +8,8 @@ export interface CreateRecruitmentCycleInput {
 export interface UpdateRecruitmentCycleInput {
   name?: string;
   academicYear?: string;
+  testSlotSwitchingEnabled?: boolean;
+  interviewSlotSwitchingEnabled?: boolean;
 }
 
 export interface RecruitmentCycleRepository {

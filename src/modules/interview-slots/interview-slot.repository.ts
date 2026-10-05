@@ -5,6 +5,8 @@ import type {
   AdminInterviewSlot,
   AdminInterviewSlotDetail,
   AppInterviewBooking,
+  AppInterviewSlot,
+  BookableInterviewSlot,
   CreateInterviewSlotInput,
   InterviewSlotForAssignment,
   InterviewSlotRepository,
@@ -20,9 +22,24 @@ export class PrismaInterviewSlotRepository implements InterviewSlotRepository {
   findActiveSubmissionForUser = async (userId: string): Promise<ActiveSubmissionForInterview | null> => {
     const submission = await this.prisma.registrationSubmission.findFirst({
       where: { userId, recruitmentCycle: { isActive: true } },
-      select: { id: true, paymentStatus: true },
+      select: {
+        id: true,
+        paymentStatus: true,
+        decision: true,
+        testResult: true,
+        recruitmentCycle: { select: { interviewSlotSwitchingEnabled: true } },
+      },
     });
-    return submission;
+    if (submission === null) {
+      return null;
+    }
+    return {
+      id: submission.id,
+      paymentStatus: submission.paymentStatus,
+      decision: submission.decision,
+      testResult: submission.testResult,
+      interviewSlotSwitchingEnabled: submission.recruitmentCycle.interviewSlotSwitchingEnabled,
+    };
   };
 
   findBookingForSubmission = async (submissionId: string): Promise<AppInterviewBooking | null> => {
@@ -44,6 +61,62 @@ export class PrismaInterviewSlotRepository implements InterviewSlotRepository {
       select: { id: true, capacity: true },
     });
     return slot;
+  };
+
+  /** Student-facing lookup: non-cancelled slot in the active cycle, with its start time. */
+  findBookableSlotById = async (interviewSlotId: string): Promise<BookableInterviewSlot | null> => {
+    return this.prisma.interviewSlot.findFirst({
+      where: { id: interviewSlotId, isCancelled: false, recruitmentCycle: { isActive: true } },
+      select: { id: true, capacity: true, startTime: true },
+    });
+  };
+
+  /** Upcoming non-cancelled slots, plus the student's own slot even if cancelled or already started. */
+  listSlotsForStudent = async (submissionId: string, now: Date): Promise<AppInterviewSlot[]> => {
+    const slots = await this.prisma.interviewSlot.findMany({
+      where: {
+        recruitmentCycle: { isActive: true },
+        OR: [{ isCancelled: false, startTime: { gt: now } }, { bookings: { some: { submissionId } } }],
+      },
+      orderBy: { startTime: "asc" },
+      select: {
+        id: true,
+        startTime: true,
+        endTime: true,
+        location: true,
+        meetingUrl: true,
+        capacity: true,
+        bookedCount: true,
+        bookings: { where: { submissionId }, select: { id: true } },
+      },
+    });
+
+    return slots.map((slot) => ({
+      interviewSlotId: slot.id,
+      startTime: slot.startTime.toISOString(),
+      endTime: slot.endTime.toISOString(),
+      location: slot.location,
+      meetingUrl: slot.meetingUrl,
+      capacity: slot.capacity,
+      remaining: Math.max(slot.capacity - slot.bookedCount, 0),
+      isMine: slot.bookings.length > 0,
+    }));
+  };
+
+  /** Compare-and-swap on the current slot, so two racing switches can't both release the same seat. */
+  moveBooking = async (
+    submissionId: string,
+    fromSlotId: string,
+    toSlotId: string,
+  ): Promise<AppInterviewBooking | null> => {
+    const moved = await this.prisma.slotBooking.updateMany({
+      where: { submissionId, slotId: fromSlotId },
+      data: { slotId: toSlotId, bookedAt: new Date() },
+    });
+    if (moved.count !== 1) {
+      return null;
+    }
+    return this.findBookingForSubmission(submissionId);
   };
 
   /** Atomic conditional increment — mirrors PrismaTestSlotRepository.tryReserveSeat. */

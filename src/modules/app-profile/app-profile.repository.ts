@@ -67,6 +67,10 @@ export class PrismaAppProfileRepository implements AppProfileRepository {
         paymentStatus: true,
         decision: true,
         decisionNote: true,
+        testResult: true,
+        recruitmentCycle: {
+          select: { testSlotSwitchingEnabled: true, interviewSlotSwitchingEnabled: true },
+        },
         testSlotBooking: {
           select: { testSlot: { select: { startTime: true, endTime: true } } },
         },
@@ -84,10 +88,12 @@ export class PrismaAppProfileRepository implements AppProfileRepository {
       paid: registration.paymentStatus === "PAID",
       decision: registration.decision,
       decisionNote: registration.decisionNote,
+      testResult: registration.testResult,
       testSlot: {
         booked: registration.testSlotBooking !== null,
         startTime: registration.testSlotBooking?.testSlot.startTime.toISOString() ?? null,
         endTime: registration.testSlotBooking?.testSlot.endTime.toISOString() ?? null,
+        switchingEnabled: registration.recruitmentCycle.testSlotSwitchingEnabled,
       },
       interview: {
         assigned: registration.slotBooking !== null,
@@ -95,6 +101,7 @@ export class PrismaAppProfileRepository implements AppProfileRepository {
         endTime: registration.slotBooking?.slot.endTime.toISOString() ?? null,
         location: registration.slotBooking?.slot.location ?? null,
         meetingUrl: registration.slotBooking?.slot.meetingUrl ?? null,
+        switchingEnabled: registration.recruitmentCycle.interviewSlotSwitchingEnabled,
       },
     };
   }
