@@ -15,8 +15,10 @@ export const updateRecruitmentCycleSchema = z.object({
     .object({
       name: z.string().trim().min(1).max(200).optional(),
       academicYear: z.string().trim().min(1).max(30).optional(),
+      testSlotSwitchingEnabled: z.boolean().optional(),
+      interviewSlotSwitchingEnabled: z.boolean().optional(),
     })
-    .refine((value) => value.name !== undefined || value.academicYear !== undefined, {
+    .refine((value) => Object.values(value).some((field) => field !== undefined), {
       message: "At least one field must be provided",
     }),
 });

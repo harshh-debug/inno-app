@@ -2,6 +2,7 @@ import { Router, type RequestHandler } from "express";
 import { validateRequest } from "../../common/validation/validate-request.js";
 import type { InterviewSlotController } from "./interview-slot.controller.js";
 import {
+  bookInterviewSlotSchema,
   createInterviewSlotSchema,
   cycleIdParamSchema,
   slotIdParamSchema,
@@ -9,10 +10,12 @@ import {
   assignInterviewSlotSchema,
 } from "./interview-slot.schemas.js";
 
-/** Student reads their own admin-assigned interview slot; there is no self-booking. */
+/** Student lists interview slots, books/switches their own (once the test is passed), and reads it back. */
 export function createInterviewSlotRouter(controller: InterviewSlotController, guard: RequestHandler[]): Router {
   const router = Router();
+  router.get("/interview-slots", guard, controller.listSlots);
   router.get("/interview-booking", guard, controller.getMyBooking);
+  router.post("/interview-booking", guard, validateRequest(bookInterviewSlotSchema), controller.bookSlot);
   return router;
 }
 

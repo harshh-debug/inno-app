@@ -11,6 +11,15 @@ export const assignTestSlotSchema = z.object({
   }),
 });
 
+export const bookTestSlotSchema = z.object({
+  body: z.object({ testSlotId: z.uuid() }),
+});
+
+export const setTestResultSchema = z.object({
+  params: registrationIdParams,
+  body: z.object({ result: z.enum(["PENDING", "PASSED", "FAILED"]) }),
+});
+
 export const cycleIdParamSchema = z.object({ params: cycleIdParams });
 export const slotIdParamSchema = z.object({ params: slotIdParams });
 
@@ -58,6 +67,8 @@ export const reorderTestSlotsSchema = z.object({
   body: z.object({ testSlotIds: z.array(z.uuid()).min(1) }),
 });
 
+export type BookTestSlotRequest = z.infer<typeof bookTestSlotSchema>["body"];
+export type SetTestResultRequest = z.infer<typeof setTestResultSchema>["body"];
 export type AssignTestSlotRequest = z.infer<typeof assignTestSlotSchema>["body"];
 export type CreateTestSlotRequest = z.infer<typeof createTestSlotSchema>["body"];
 export type UpdateTestSlotRequest = z.infer<typeof updateTestSlotSchema>["body"];

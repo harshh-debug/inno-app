@@ -7,6 +7,10 @@ const registrationIdParams = z.object({ registrationId: z.uuid() });
 export const cycleIdParamSchema = z.object({ params: cycleIdParams });
 export const slotIdParamSchema = z.object({ params: slotIdParams });
 
+export const bookInterviewSlotSchema = z.object({
+  body: z.object({ interviewSlotId: z.uuid() }),
+});
+
 export const assignInterviewSlotSchema = z.object({
   params: registrationIdParams,
   body: z.object({
@@ -65,3 +69,5 @@ export const updateInterviewSlotSchema = z.object({
 export type AssignInterviewSlotRequest = z.infer<typeof assignInterviewSlotSchema>["body"];
 export type CreateInterviewSlotRequest = z.infer<typeof createInterviewSlotSchema>["body"];
 export type UpdateInterviewSlotRequest = z.infer<typeof updateInterviewSlotSchema>["body"];
+
+export type BookInterviewSlotRequest = z.infer<typeof bookInterviewSlotSchema>["body"];

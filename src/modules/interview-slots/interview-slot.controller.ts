@@ -3,6 +3,7 @@ import { AppError } from "../../common/errors.js";
 import type { AuthenticatedRequest } from "../authentication/auth.middleware.js";
 import type {
   AssignInterviewSlotRequest,
+  BookInterviewSlotRequest,
   CreateInterviewSlotRequest,
   UpdateInterviewSlotRequest,
 } from "./interview-slot.schemas.js";
@@ -16,6 +17,21 @@ export class InterviewSlotController {
       throw new AppError("UNAUTHORIZED", 401, "A bearer token is required");
     }
     response.json({ data: await this.service.getMyBooking(request.auth.userId) });
+  };
+
+  listSlots = async (request: AuthenticatedRequest, response: Response): Promise<void> => {
+    if (request.auth === undefined) {
+      throw new AppError("UNAUTHORIZED", 401, "A bearer token is required");
+    }
+    response.json({ data: await this.service.listSlotsForStudent(request.auth.userId) });
+  };
+
+  bookSlot = async (request: AuthenticatedRequest, response: Response): Promise<void> => {
+    if (request.auth === undefined) {
+      throw new AppError("UNAUTHORIZED", 401, "A bearer token is required");
+    }
+    const { interviewSlotId } = request.body as BookInterviewSlotRequest;
+    response.json({ data: await this.service.bookSlot(request.auth.userId, interviewSlotId) });
   };
 
   assignSlot = async (request: Request, response: Response): Promise<void> => {

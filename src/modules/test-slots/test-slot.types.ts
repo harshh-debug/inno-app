@@ -1,4 +1,4 @@
-import type { PaymentStatus } from "../../../generated/prisma/client.js";
+import type { PaymentStatus, RecruitmentDecision, TestResult } from "../../../generated/prisma/client.js";
 
 // Module 7 — GET /app/test-slot-booking
 export interface AppTestSlotBooking {
@@ -8,14 +8,43 @@ export interface AppTestSlotBooking {
   bookedAt: string;
 }
 
+// Module 7 — GET /app/test-slots
+export interface AppTestSlot {
+  testSlotId: string;
+  startTime: string;
+  endTime: string;
+  capacity: number;
+  remaining: number;
+  isMine: boolean;
+}
+
+export interface AppTestSlotList {
+  slots: AppTestSlot[];
+  switchingEnabled: boolean;
+}
+
 export interface ActiveSubmissionForBooking {
   id: string;
   paymentStatus: PaymentStatus;
+  decision: RecruitmentDecision;
+  testSlotSwitchingEnabled: boolean;
 }
 
 export interface TestSlotForBooking {
   id: string;
   capacity: number;
+}
+
+// Student booking also needs to know whether the slot is open to them.
+export interface BookableTestSlot extends TestSlotForBooking {
+  isVisible: boolean;
+  startTime: Date;
+}
+
+export interface TestResultUpdate {
+  registrationId: string;
+  testResult: TestResult;
+  testResultUpdatedAt: string;
 }
 
 // Admin views expose the full row — capacity/order/visibility are all
@@ -71,6 +100,10 @@ export interface TestSlotRepository {
   findActiveSubmissionForUser(userId: string): Promise<ActiveSubmissionForBooking | null>;
   findBookingForSubmission(submissionId: string): Promise<AppTestSlotBooking | null>;
   findSlotById(testSlotId: string): Promise<TestSlotForBooking | null>;
+  findBookableSlotById(testSlotId: string): Promise<BookableTestSlot | null>;
+  listSlotsForStudent(submissionId: string, now: Date): Promise<AppTestSlot[]>;
+  moveBooking(submissionId: string, fromSlotId: string, toSlotId: string): Promise<AppTestSlotBooking | null>;
+  setTestResult(submissionId: string, result: TestResult): Promise<TestResultUpdate>;
   tryReserveSeat(testSlotId: string, capacity: number): Promise<boolean>;
   releaseSeat(testSlotId: string): Promise<void>;
   createBooking(submissionId: string, testSlotId: string): Promise<AppTestSlotBooking>;

@@ -1,4 +1,4 @@
-import type { Domain, PlatformRole, RecruitmentDecision } from "../../../generated/prisma/client.js";
+import type { Domain, PlatformRole, RecruitmentDecision, TestResult } from "../../../generated/prisma/client.js";
 
 // Gap 2 — GET /app/me. Only fields that actually exist on the schema today.
 // enrollmentNumber / branch / section / semester / CGPA / domainPreferences
@@ -18,6 +18,7 @@ export interface AppRecruitmentTestSlot {
   booked: boolean;
   startTime: string | null;
   endTime: string | null;
+  switchingEnabled: boolean;
 }
 
 export interface AppRecruitmentInterview {
@@ -26,12 +27,14 @@ export interface AppRecruitmentInterview {
   endTime: string | null;
   location: string | null;
   meetingUrl: string | null;
+  switchingEnabled: boolean;
 }
 
 export interface AppRecruitmentSummary {
   paid: boolean;
   decision: RecruitmentDecision;
   decisionNote: string | null;
+  testResult: TestResult;
   testSlot: AppRecruitmentTestSlot;
   interview: AppRecruitmentInterview;
 }
