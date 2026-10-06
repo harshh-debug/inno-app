@@ -5,12 +5,24 @@ import type { AccountDeletionPurgeService } from "./account-deletion-purge.servi
 // no account sits anonymizable for long, without running the scan constantly.
 const PURGE_INTERVAL_MS = 6 * 60 * 60 * 1_000;
 
-// Long enough that boot is not competing with request traffic, short enough
-// that a local run is easy to observe.
-const INITIAL_DELAY_MS = 10 * 1_000;
+// Long enough that boot is not competing with request traffic or with the
+// first connection to a serverless database that may still be waking, short
+// enough that a local run is easy to observe.
+const INITIAL_DELAY_MS = 45 * 1_000;
 
 // Arbitrary but fixed: any key works, provided every replica uses the same one.
 const PURGE_ADVISORY_LOCK_KEY = 4_820_7731;
+
+// Bounds how long the lock-holding transaction can stay open. The purge is a
+// findMany plus a handful of updates, so seconds; this is a stuck-run ceiling,
+// not an expected duration.
+const PURGE_LOCK_TIMEOUT_MS = 5 * 60 * 1_000;
+
+// How long to wait for a connection before giving up on starting the
+// transaction. Prisma's 2s default is too tight against a serverless database:
+// a suspended Neon compute takes seconds to wake, and the first purge runs
+// shortly after boot, when the pool may hold no established connection at all.
+const PURGE_LOCK_MAX_WAIT_MS = 30 * 1_000;
 
 /**
  * Replaces the BullMQ repeatable job. Running once shortly after boot and then
@@ -66,38 +78,50 @@ export class AccountDeletionPurgeScheduler {
   }
 
   /**
-   * A session-level advisory lock keeps a second API replica from running the
-   * same scan concurrently. try_ is deliberate — if another replica holds it,
-   * this one skips rather than queues, because the work is already being done.
+   * An advisory lock keeps a second API replica from running the same scan
+   * concurrently. try_ is deliberate — if another replica holds it, this one
+   * skips rather than queues, because the work is already being done.
+   *
+   * The lock is transaction-scoped, and taken inside an interactive
+   * transaction so that acquiring and releasing it are guaranteed to happen on
+   * one connection. A session-scoped lock cannot promise that here: Prisma's pg
+   * adapter hands out a pooled connection per query, so the unlock could land
+   * on a different backend than the lock, silently fail, and leave the lock
+   * held until that connection was recycled — after which no replica could
+   * acquire it again. Commit or rollback releases this one, and so does the
+   * connection dying mid-run. It is also the only form that survives a
+   * transaction-mode pooler such as Neon's.
+   *
+   * The purge itself runs on the pooled client rather than `transaction`: it is
+   * a sequence of independent, idempotent housekeeping statements that should
+   * commit as they go, not one all-or-nothing batch. The transaction here is
+   * only the lock's lifetime.
    */
   private async runOnce(): Promise<void> {
-    let acquired = false;
     try {
-      const [row] = await this.prisma.$queryRaw<{ locked: boolean }[]>`
-        SELECT pg_try_advisory_lock(${PURGE_ADVISORY_LOCK_KEY}) AS locked
-      `;
-      acquired = row?.locked === true;
-      if (!acquired) {
-        return;
-      }
+      await this.prisma.$transaction(
+        async (transaction) => {
+          const [row] = await transaction.$queryRaw<{ locked: boolean }[]>`
+            SELECT pg_try_advisory_xact_lock(${PURGE_ADVISORY_LOCK_KEY}) AS locked
+          `;
+          if (row?.locked !== true) {
+            return;
+          }
 
-      const { anonymizedAccounts, sweptTokens, sweptEmailJobs } = await this.service.run();
-      if (anonymizedAccounts > 0 || sweptTokens > 0 || sweptEmailJobs > 0) {
-        console.info(
-          `Account deletion purge: anonymized ${anonymizedAccounts} account(s), ` +
-            `swept ${sweptTokens} expired token(s) and ${sweptEmailJobs} failed email job(s)`,
-        );
-      }
+          const { anonymizedAccounts, sweptTokens, sweptEmailJobs } = await this.service.run();
+          if (anonymizedAccounts > 0 || sweptTokens > 0 || sweptEmailJobs > 0) {
+            console.info(
+              `Account deletion purge: anonymized ${anonymizedAccounts} account(s), ` +
+                `swept ${sweptTokens} expired token(s) and ${sweptEmailJobs} failed email job(s)`,
+            );
+          }
+        },
+        { timeout: PURGE_LOCK_TIMEOUT_MS, maxWait: PURGE_LOCK_MAX_WAIT_MS },
+      );
     } catch (error) {
       console.error("Account deletion purge failed", {
         error: error instanceof Error ? error.message : String(error),
       });
-    } finally {
-      if (acquired) {
-        await this.prisma
-          .$queryRaw`SELECT pg_advisory_unlock(${PURGE_ADVISORY_LOCK_KEY})`
-          .catch(() => undefined);
-      }
     }
   }
 }
