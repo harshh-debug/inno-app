@@ -3,17 +3,21 @@ import { validateRequest } from "../../common/validation/validate-request.js";
 import type { TestSlotController } from "./test-slot.controller.js";
 import {
   assignTestSlotSchema,
+  bookTestSlotSchema,
   createTestSlotSchema,
   cycleIdParamSchema,
   reorderTestSlotsSchema,
+  setTestResultSchema,
   slotIdParamSchema,
   updateTestSlotSchema,
 } from "./test-slot.schemas.js";
 
-/** Student reads their own admin-assigned slot; there is no self-booking. */
+/** Student lists slots, books/switches their own, and reads their current booking. */
 export function createTestSlotRouter(controller: TestSlotController, guard: RequestHandler[]): Router {
   const router = Router();
+  router.get("/test-slots", guard, controller.listSlots);
   router.get("/test-slot-booking", guard, controller.getMyBooking);
+  router.post("/test-slot-booking", guard, validateRequest(bookTestSlotSchema), controller.bookSlot);
   return router;
 }
 
@@ -56,6 +60,7 @@ export function createAdminRegistrationTestSlotRouter(
   router.use(...adminGuard);
 
   router.patch("/registrations/:registrationId/test-slot", validateRequest(assignTestSlotSchema), controller.assignSlot);
+  router.patch("/registrations/:registrationId/test-result", validateRequest(setTestResultSchema), controller.setTestResult);
 
   return router;
 }

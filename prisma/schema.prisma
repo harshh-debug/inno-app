@@ -47,6 +47,12 @@ enum PaymentStatus {
   PAID
 }
 
+enum TestResult {
+  PENDING
+  PASSED
+  FAILED
+}
+
 enum RecruitmentDecision {
   PENDING
   SELECTED
@@ -195,6 +201,10 @@ model RecruitmentCycle {
   academicYear String  @map("academic_year") @db.VarChar(30)
   isActive     Boolean @default(false) @map("is_active")
 
+  // Admin kill-switches: when false, students with a slot can no longer move; first bookings stay open.
+  testSlotSwitchingEnabled      Boolean @default(true) @map("test_slot_switching_enabled")
+  interviewSlotSwitchingEnabled Boolean @default(true) @map("interview_slot_switching_enabled")
+
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
@@ -296,6 +306,9 @@ model RegistrationSubmission {
   decisionNote String?             @map("decision_note") @db.Text
   decidedAt    DateTime?           @map("decided_at") @db.Timestamptz(3)
   decidedById  String?             @map("decided_by_id") @db.Uuid
+
+  testResult          TestResult @default(PENDING) @map("test_result")
+  testResultUpdatedAt DateTime?  @map("test_result_updated_at") @db.Timestamptz(3)
 
   submittedAt DateTime @default(now()) @map("submitted_at") @db.Timestamptz(3)
   updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)

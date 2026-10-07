@@ -3,8 +3,10 @@ import { AppError } from "../../common/errors.js";
 import type { AuthenticatedRequest } from "../authentication/auth.middleware.js";
 import type {
   AssignTestSlotRequest,
+  BookTestSlotRequest,
   CreateTestSlotRequest,
   ReorderTestSlotsRequest,
+  SetTestResultRequest,
   UpdateTestSlotRequest,
 } from "./test-slot.schemas.js";
 import type { TestSlotService } from "./test-slot.service.js";
@@ -17,6 +19,27 @@ export class TestSlotController {
       throw new AppError("UNAUTHORIZED", 401, "A bearer token is required");
     }
     response.json({ data: await this.service.getMyBooking(request.auth.userId) });
+  };
+
+  listSlots = async (request: AuthenticatedRequest, response: Response): Promise<void> => {
+    if (request.auth === undefined) {
+      throw new AppError("UNAUTHORIZED", 401, "A bearer token is required");
+    }
+    response.json({ data: await this.service.listSlotsForStudent(request.auth.userId) });
+  };
+
+  bookSlot = async (request: AuthenticatedRequest, response: Response): Promise<void> => {
+    if (request.auth === undefined) {
+      throw new AppError("UNAUTHORIZED", 401, "A bearer token is required");
+    }
+    const { testSlotId } = request.body as BookTestSlotRequest;
+    response.json({ data: await this.service.bookSlot(request.auth.userId, testSlotId) });
+  };
+
+  setTestResult = async (request: Request, response: Response): Promise<void> => {
+    const { registrationId } = request.params as { registrationId: string };
+    const { result } = request.body as SetTestResultRequest;
+    response.json({ data: await this.service.setTestResult(registrationId, result) });
   };
 
   assignSlot = async (request: Request, response: Response): Promise<void> => {
